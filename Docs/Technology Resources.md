@@ -1,0 +1,11 @@
+# Technology Resources Document
+
+This document lists the technologies required for the project, along with their documentation for reference.
+
+| **Phase**               | **Technology**                     | **Documentation URL**                                                                 |
+|-------------------------|------------------------------------|--------------------------------------------------------------------------------------|
+| Data Collection         | Midgard API, Uniswap Subgraph, CoinGecko API, Tendermint RPC | [Midgard Public API](https://midgard.mayachain.info/v2/doc), [Uniswap V2 Subgraph](https://thegraph.com/explorer/subgraphs/Cp6oamJGsR621MUQnNVsdixFmV4wXvDzpUhwktuGJj2c?view=Overview), [CoinGecko API](https://www.coingecko.com/en/api/documentation), MayaChain Tendermint RPC (e.g., [Mainnet](https://tendermint.mayachain.info), [General Docs](https://docs.tendermint.com/v0.34/rpc/)) |
+| Data Preprocessing      | Python, pandas, scikit-learn, PyTorch | [Python Documentation](https://docs.python.org/3/), [pandas Documentation](https://pandas.pydata.org/docs/), [scikit-learn Documentation](https://scikit-learn.org/stable/documentation.html), [PyTorch Documentation](https://pytorch.org/docs/stable/index.html) |
+| Model Development       | PyTorch (TransformerEncoder)       | [PyTorch Documentation](https://pytorch.org/docs/stable/index.html), [torch.nn.TransformerEncoder](https://pytorch.org/docs/stable/generated/torch.nn.TransformerEncoder.html), [PyTorch on Mac](https://developer.apple.com/metal/pytorch/) |
+| Training                | Cloud Services (AWS, GCP, Azure)   | [AWS](https://aws.amazon.com/), [GCP](https://cloud.google.com/), [Azure](https://azure.microsoft.com/) |
+| Real-Time Inference     | Optimized PyTorch, NumPy          | [PyTorch Documentation](https://pytorch.org/docs/stable/index.html), [NumPy Documentation](https://numpy.org/doc/), [asyncio](https://docs.python.org/3/library/asyncio.html), [aiohttp](https://docs.aiohttp.org/en/stable/) |
