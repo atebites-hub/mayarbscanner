@@ -1,7 +1,14 @@
 # Project Scratchpad
 
 ## Background and Motivation
-The user wants to implement a Maya Arbitrage Scanner. The goal is to identify and execute arbitrage opportunities on the Maya Protocol. This involves data collection, model development, training, and real-time inference. The current request is to begin Phase 1 implementation in Executor mode.
+The user wants to create a scanner for arbitrage opportunities on Maya Protocol. This involves fetching real-time transaction data, identifying potential arbitrage opportunities by comparing input and output values against market prices, and then potentially simulating or executing trades.
+
+Initial focus is on fetching and processing transaction data correctly.
+**Update for Task 1.2 (Major Revision):** The requirement has changed significantly. The goal is now to fetch **all actions (transactions) from Maya Protocol's Midgard API that have occurred within the last 24 hours**. These actions will then be processed and saved.
+**Further Expansion:** The project will also include:
+1.  **Real-time Transaction Streaming:** Continuously fetch the latest confirmed and pending transactions from Midgard.
+2.  **Pending Block Construction:** Group incoming pending transactions into a conceptual "pending block."
+3.  **Flask Web Application:** Display the 24-hour historical data, the real-time confirmed transactions, and the pending block data in a web interface.
 
 ## Key Challenges and Analysis
 - Accessing and integrating data from multiple APIs (Maya, Uniswap, CoinGecko).
@@ -9,69 +16,204 @@ The user wants to implement a Maya Arbitrage Scanner. The goal is to identify an
 - Ensuring the data preprocessing pipeline is robust and efficient.
 - Setting up a reliable mempool monitoring mechanism.
 - Installing and managing dependencies like Python and PyTorch.
+- **API Interaction**: Understanding the Midgard API, its endpoints, rate limits, and data structures is crucial.
+- **Data Parsing**: Extracting relevant information (assets, amounts, transaction IDs, types) from complex JSON responses.
+- **Arbitrage Logic**: Defining what constitutes an arbitrage opportunity and how to calculate potential profit (ΔX), considering fees and slippage. This will require price data.
+- **Real-time Processing**: Efficiently handling incoming data to identify opportunities quickly.
+- **Midgard API Behavior for Specific Block Data**: The primary challenge for fetching transactions from a *specific* historical block (e.g., `last_confirmed_height - 1`) is that the Midgard `/v2/actions` endpoint has proven difficult to use for this exact purpose.
+    *   Using the `height` parameter with `offset` for pagination does not strictly filter by that height; it returns actions from various heights, requiring client-side filtering.
+    *   Even a `limit=1` query with a `height` parameter (`/actions?height=H&limit=1`) seems unreliable for confirming that block `H` truly contains an action *from block H*. The API appears to sometimes return the closest available action from a *different, older* height if block `H` is empty or its actions are not primary in some internal Midgard index for that query. This makes it hard to reliably identify a `target_block_height` whose transactions can then be fetched.
+    *   Attempting a general scan (no `height` filter, using `offset` and `limit`) for `target_block_height = last_confirmed_height - 1` often fails because the newest actions returned by `/actions?offset=0` are already from blocks *older* than `last_confirmed_height - 1`. This causes the client-side scan (which stops if `action.height < target_block_height`) to terminate on the first page, finding no actions for the target.
+- **Pagination**: Ensuring all transactions for a target block are fetched, even if they span multiple API response pages. The Midgard API returns actions newest first, so to find an older target block, pagination must proceed until actions older than the target are encountered.
+- **Testing Environment Consistency**: Ensuring that file edits are immediately reflected when test scripts are run.
+- **Empty Data Handling**: Correctly creating output files (e.g., empty CSV with headers) when no relevant data is found for a query (e.g., no transactions in a specific block).
+- **Fetching 24-Hour Data**: Efficiently retrieving all actions from the Midgard API within the last 24 hours. This will likely involve:
+    *   Calculating a start timestamp (current time - 24 hours).
+    *   Paginating through the `/v2/actions` endpoint (newest first).
+    *   Client-side filtering of actions based on their `date` (timestamp) field to include only those within the 24-hour window.
+    *   Stopping pagination once actions older than the 24-hour window are encountered.
+- **Handling Large Data Volume**: The 24-hour window might contain a large number of actions, requiring efficient processing and memory management.
+- **Real-time Data Streaming**: Implementing a robust and efficient mechanism to continuously fetch new data (both confirmed and pending actions) from Midgard. This might involve careful management of polling intervals or exploring if Midgard offers any push/subscription mechanisms (unlikely for REST API). This will require threading for non-blocking polling.
+- **Pending Block Logic**: Defining the structure and update rules for a "pending block" composed of transactions that are not yet confirmed. This includes how to handle transactions that confirm or expire.
+- **Flask Application Development**: 
+    *   Designing appropriate API endpoints.
+    *   Managing application state if the Flask app needs to serve live, continuously updating data.
+    *   Implementing a user-friendly frontend that can display both historical and real-time data effectively.
+    *   Ensuring asynchronous operations if needed to prevent blocking while serving live updates.
+- **Comprehensive Testing**: Significantly refactoring `test_phase1_completion.py` to cover the 24-hour fetch, the new real-time streaming logic, pending block construction, and the Flask application's basic functionality. This will likely require advanced mocking for streaming behaviors.
 
 ## High-level Task Breakdown
-(Derived from Docs/Implementation Plan.md)
+(Revised significantly to reflect new requirements)
 
-**Phase 1: Data Collection and Preprocessing (2 weeks)**
-- **Task 1.1: Set up API Connections**
-  - Description: Connect to Maya blockchain, Uniswap, and CoinGecko APIs.
-  - Code Guidance: Use Python `requests` or `aiohttp` to fetch data from endpoints (e.g., `https://api.mayaprotocol.com/pools`).
-  - Deliverable: Scripts to query and log API responses.
-  - Success Criteria: Successfully fetch and print sample data from each API.
-- **Task 1.2: Fetch and Store Historical Data**
-  - Description: Collect 6 months of Maya transaction data (`arb_ID`, `ΔX`, etc.).
-  - Code Guidance: Use Midgard API endpoint `/v2/actions` to fetch recent Maya Protocol actions (swaps, liquidity changes, etc.). Use `pandas` to save data as CSV.
-  - Deliverable: A CSV file with recent transaction data.
-  - Success Criteria: A CSV file `data/realtime_maya_transactions.csv` containing at least a few dozen rows of recent Maya Protocol actions, fetched live from the Midgard API.
-- **Task 1.3: Implement Mempool Monitoring**
-  - Description: Monitor pending transactions in real time.
-  - Code Guidance: Use `web3.py` or a custom Maya node setup to access mempool data. (Note: Maya mempool access might differ from Ethereum's `web3.py` approach and require specific Maya chain tools/APIs).
-  - Deliverable: A script logging mempool activity.
-  - Success Criteria: Script prints simulated mempool transactions or a message indicating no specific Maya mempool API found yet.
-- **Task 1.4: Preprocess Data**
-  - Description: Normalize features, create `arb_ID` embeddings, and build sequences.
-  - Code Guidance: Use `sklearn` for normalization, `PyTorch` for embeddings, and create a function to generate sequences of `M` trades.
-  - Deliverable: A preprocessing pipeline outputting tensor sequences.
-  - Success Criteria: A Python function that takes raw data (simulated) and outputs processed tensors.
+*   **Phase 1: Core Data Engine and Initial Display**
+    *   1.1. Setup Python Environment & Dependencies (Pandas, Requests, Flask) - **DONE** (Flask to be added if not present)
+    *   1.2. Fetch All Transactions from Blocks with Activity in the Last 24 Hours - **DONE**
+        *   1.2.1. Connect to Midgard API - **DONE**
+        *   1.2.2 (New Strategy): In `fetch_realtime_transactions.py`, implement logic to fetch actions page by page from the Midgard `/v2/actions` endpoint. - **DONE**
+        *   1.2.3 (New Strategy): Continue fetching pages as long as the timestamp of the actions (`date` field) is within the last 24 hours. Stop when actions older than 24 hours are encountered or no more actions are returned. - **DONE**
+        *   1.2.4 (New Strategy): Collect all actions that fall within the 24-hour window. - **DONE**
+        *   1.2.5 (New Strategy): Parse all collected actions using `parse_action`. - **DONE**
+        *   1.2.6 (New Strategy): Store all parsed transactions into a Pandas DataFrame. - **DONE**
+        *   1.2.7 (New Strategy): Save the DataFrame to `data/historical_24hr_maya_transactions.csv`. Handle empty results gracefully. - **DONE**
+    *   1.3. Real-time Transaction Streaming and Pending Block Construction - **DONE**
+        *   1.3.1. Design Data Structures: Define Python classes or dictionaries for representing confirmed actions/blocks and "pending blocks" (collections of pending transactions with relevant metadata). - **DONE** (Initial structures in `realtime_stream_manager.py` created, `common_utils.py` for parsing also created).
+        *   1.3.2. Confirmed Actions Stream: Implement a function/module (e.g., in a new `realtime_stream_manager.py` or extending `mempool_monitor.py`) to continuously poll Midgard for *newly confirmed* actions (actions with status 'success' or 'refund' that are more recent than the last seen confirmed action). - **DONE** (Implemented `poll_confirmed_actions` in `RealtimeStreamManager`).
+        *   1.3.3. Pending Actions Stream: Adapt/reuse `mempool_monitor.py` logic or integrate into `realtime_stream_manager.py` to continuously poll Midgard for *pending* actions. - **DONE** (Implemented `poll_pending_actions` and `_prune_stale_pending_actions` in `RealtimeStreamManager`).
+        *   1.3.4. Pending Block Management: Develop logic to:
+            *   Add new pending actions to the "pending block" data structure. - **DONE** (Covered by `poll_pending_actions`)
+            *   Remove actions from the "pending block" if they are later seen as confirmed (in 1.3.2 stream) or if they are assumed to have expired/failed (requires criteria, e.g., age). - **DONE** (Confirmed removal in `poll_confirmed_actions`, expiry in `_prune_stale_pending_actions`).
+        *   1.3.5. Data Aggregation: Maintain in-memory collections of recent confirmed actions and the current pending block, ready for access by the Flask app. - **DONE** (`RealtimeStreamManager` stores and provides getters).
+        *   1.3.6 Implement Threaded Polling: Enhance `RealtimeStreamManager` to use threads for continuous, non-blocking polling of confirmed and pending actions. - **DONE** (Implemented threaded polling in `RealtimeStreamManager`).
+    *   1.4. Flask Web Application for Data Display - **DONE**
+        *   1.4.1. Setup Basic Flask App: Create a new `app.py` with a basic Flask application. Install Flask dependency. - **DONE**
+        *   1.4.2. Data Access Layer: Implement functions within the Flask app or a helper module to access:
+            *   The 24-hour historical data (from the CSV file generated in 1.2.7). - **DONE**
+            *   The live stream of confirmed actions (from 1.3.5). - **DONE**
+            *   The current "pending block" data (from 1.3.5). - **DONE**
+        *   1.4.3. Flask Endpoints: Create API endpoints:
+            *   `/historical-24hr`: Returns the 24-hour transaction data (e.g., as JSON). - **DONE**
+            *   `/live-confirmed`: Returns recent confirmed transactions. - **DONE**
+            *   `/live-pending`: Returns the current pending block transactions. - **DONE**
+        *   1.4.4. Frontend Design (Simple): Create basic HTML templates (`templates` folder) and static files (`static` folder). - **DONE**
+            *   A page to display the 24-hour data (e.g., in a table). - **DONE** (`index.html` created)
+            *   A section/page to display live confirmed transactions. - **DONE** (placeholders in `index.html`)
+            *   A section/page to display pending transactions. - **DONE** (placeholders in `index.html`)
+        *   1.4.5. Frontend Data Fetching: Use JavaScript (e.g., `fetch` API with `setInterval` or a more robust solution like Server-Sent Events if time permits) to poll the Flask endpoints and update the display dynamically for live data. - **DONE**
+    *   1.5. Test Suite Enhancement
+        *   1.5.1. Test 24-Hour Fetch: Refactor/rewrite `test_task_1_2_realtime_data` in `test_phase1_completion.py` to validate the 24-hour data fetching (Task 1.2), checking for correct timestamp filtering, data integrity, and CSV output. - **DONE**
+        *   1.5.2. Test Real-time Streaming (Basic): Design and implement new tests for the core logic of fetching confirmed and pending actions (Task 1.3.2, 1.3.3). This might involve mocking `requests.get` to simulate API responses and checking if the streaming functions process them correctly. Testing continuous polling and pending block updates will be challenging and might be simplified initially.
+        *   1.5.3. Test Flask App (Basic): Add new tests (possibly in `test_app.py` or `test_phase1_completion.py`) to check if Flask endpoints (Task 1.4.3) are reachable and return expected data formats (e.g., JSON responses, correct status codes).
+
+*   **Phase 2: Arbitrage Identification** (Will use data from Phase 1)
+    *   (Sub-tasks remain largely the same as previously defined, but will operate on the new data sources)
+*   **Phase 3: Reporting and Simulation (Future Scope)**
+    *   (Sub-tasks remain as previously defined)
+
 
 ## Project Status Board
-(To be filled by Executor, reviewed by Planner)
-- [x] Install Python and necessary libraries (requests, pandas, scikit-learn, PyTorch).
-- [x] Task 1.1: Set up API Connections
-- [x] Task 1.2 (Redo - Real-time data): Fetch and Store Real-time Maya Transaction Data via Midgard API.
-- [x] Task 1.3: Implement Mempool Monitoring (Simulated/Placeholder)
-- [x] Task 1.4: Preprocess Data (Simulated)
-- [x] Create a Python test script demonstrating Phase 1 completion.
+
+**Current Overall Progress: Phase 1 - Core Data Engine and Initial Display is COMPLETE. Ready to start Phase 2.**
+
+*   [x] **Phase 1: Core Data Engine and Initial Display**
+    *   [x] 1.1. Setup Python Environment & Dependencies (Pandas, Requests, Flask)
+    *   [x] 1.2. Fetch All Transactions from Blocks with Activity in the Last 24 Hours
+        *   [x] 1.2.1. Connect to Midgard API
+        *   [x] 1.2.2 (New Strategy): Implement paged fetching in `fetch_realtime_transactions.py`.
+        *   [x] 1.2.3 (New Strategy): Implement 24-hour timestamp filtering.
+        *   [x] 1.2.4 (New Strategy): Collect actions within 24-hour window.
+        *   [x] 1.2.5 (New Strategy): Parse collected actions.
+        *   [x] 1.2.6 (New Strategy): Store in DataFrame.
+        *   [x] 1.2.7 (New Strategy): Save to `data/historical_24hr_maya_transactions.csv`.
+    *   [x] 1.3. Real-time Transaction Streaming and Pending Block Construction
+        *   [x] 1.3.1. Design Data Structures for confirmed and pending blocks.
+        *   [x] 1.3.2. Implement stream for newly confirmed actions.
+        *   [x] 1.3.3. Implement stream for pending actions.
+        *   [x] 1.3.4. Develop pending block management logic.
+        *   [x] 1.3.5. Implement in-memory data aggregation for Flask.
+        *   [x] 1.3.6 Implement Threaded Polling in `RealtimeStreamManager`.
+    *   [x] 1.4. Flask Web Application for Data Display
+        *   [x] 1.4.1. Setup Basic Flask App (`app.py`, install Flask)
+        *   [x] 1.4.2. Implement Data Access Layer for Flask.
+        *   [x] 1.4.3. Create Flask API Endpoints.
+        *   [x] 1.4.4. Design Simple Frontend (HTML templates, static files).
+        *   [x] 1.4.5. Implement Frontend Data Fetching and Dynamic Updates.
+    *   [x] 1.5. Test Suite Enhancement
+        *   [x] 1.5.1. Refactor/Rewrite tests for 24-Hour Fetch logic.
+        *   [x] 1.5.2. Design and implement tests for Real-time Streaming logic.
+        *   [x] 1.5.3. Design and implement tests for Flask App endpoints.
+*   [ ] **Phase 2: Arbitrage Identification** (All sub-tasks pending)
+*   [ ] **Phase 3: Reporting and Simulation** (All sub-tasks pending)
 
 ## Executor's Feedback or Assistance Requests
-(To be filled by Executor when help is needed or milestones are reached)
-- Successfully suggested commands to install Homebrew, Python 3.13, and Python libraries (requests, pandas, scikit-learn, PyTorch). Libraries were installed using `pip` associated with a Python 3.9 environment, which might not be the intended Python 3.13 from Homebrew. This could be a potential issue if the PATH is not configured to prioritize `/opt/homebrew/bin`.
-- Task 1.1 (Set up API Connections) is complete. Successfully connected to Maya Protocol API (`https://mayanode.mayachain.info/mayachain/pools`) and CoinGecko API. Uniswap connection is a placeholder as it requires more complex integration (GraphQL/SDK).
-- Task 1.2 (Fetch and Store Historical Data (Simulated)) was redone to fetch real-time data.
-  - Successfully fetched 50 real-time Maya Protocol actions using the Midgard API endpoint `https://midgard.mayachain.info/v2/actions`.
-  - Data saved to `data/realtime_maya_transactions.csv`.
-  - Encountered and resolved several issues during this process:
-    - Initial `python` command failed (used `python3`).
-    - `ModuleNotFoundError: No module named 'pandas'` resolved by creating a Python virtual environment (`.venv`) and installing `pandas` and `requests` into it using `.venv/bin/python -m pip install ...`.
-    - API calls to Midgard initially failed with a 500 error due to requesting `limit=100`, which exceeds the documented maximum of 50. Corrected by reducing the limit.
-    - API timeout was increased from 10s to 30s in `api_connections.py` to handle potentially slower responses, though the `limit` issue was the primary cause of failure.
-- Task 1.3 (Implement Mempool Monitoring (Simulated/Placeholder)) is complete. Tested successfully.
-- Task 1.4 (Preprocess Data (Simulated)) is complete. `scikit-learn` and `torch` (with `torchvision`, `torchaudio`) were installed into the `.venv` to resolve `ModuleNotFoundError`. Tested successfully.
-- All Phase 1 tasks are now complete and `src/test_phase1_completion.py` passes all tests, including the updated Task 1.2 for real-time data and Task 1.4 after dependency installation in the virtual environment.
+
+Completed Task 1.2 (24-Hour Historical Data Fetch) and Task 1.5.1 (Update Test Suite for 24-Hour Fetch).
+- `src/fetch_realtime_transactions.py` modified for 24-hour data fetching.
+- `src/test_phase1_completion.py` updated to test the new 24-hour fetching logic.
+
+Completed Task 1.3.1 (Design Data Structures for Streaming):
+- Created `src/common_utils.py` with `parse_action` and `DF_COLUMNS`.
+- Updated `src/fetch_realtime_transactions.py` to use `common_utils.py`.
+- Created `src/realtime_stream_manager.py` with `RealtimeStreamManager` class structure and data stores.
+
+Completed Task 1.3.2 (Confirmed Actions Stream):
+- Implemented `poll_confirmed_actions` method in `RealtimeStreamManager`.
+
+Completed Task 1.3.3 (Pending Actions Stream):
+- Implemented `poll_pending_actions` method in `RealtimeStreamManager`, including logic for pruning stale actions.
+
+Tasks 1.3.4 (Pending Block Management) and 1.3.5 (Data Aggregation) are considered complete as their core logic is integrated into the `RealtimeStreamManager` and its polling methods.
+
+Completed Task 1.3.6 (Implement Threaded Polling):
+- Implemented threaded, continuous polling in `RealtimeStreamManager` using `start_streaming` and `stop_streaming` methods.
+
+Task 1.3 is now complete.
+
+Verified Task 1.4.1 (Basic Flask App Setup) is complete.
+
+Completed Task 1.4.2 (Data Access Layer):
+- Integrated `RealtimeStreamManager` into `src/app.py`.
+- Added `get_historical_transactions()` function to load CSV data.
+- Implemented `atexit` handler for graceful shutdown of the stream manager.
+
+Completed Task 1.4.3 (Flask Endpoints):
+- Added `/api/historical-24hr`, `/api/live-confirmed`, and `/api/live-pending` endpoints to `src/app.py`.
+
+Completed Task 1.4.4 (Frontend Design):
+- Created `src/templates/index.html` with basic structure.
+- Created `src/static/style.css` for styling.
+- Created placeholder `src/static/script.js`.
+- Updated `src/app.py` to serve `index.html`.
+
+Completed Task 1.4.5 (Frontend Data Fetching):
+- Implemented JavaScript in `src/static/script.js` to fetch and display data from API endpoints, including periodic updates for live data.
+
+Task 1.4 is now complete.
+Proceeding to Task 1.5.2: Test Real-time Streaming logic.
+
+Completed Task 1.5.2: Test Real-time Streaming logic.
+- Enhanced `test_task_1_3_realtime_stream_manager` in `src/test_phase1_completion.py` with more detailed scenarios for `RealtimeStreamManager`'s polling methods (confirmed and pending actions), including edge cases and error handling.
+- Improved threading tests to verify that polling methods are actively called.
+
+Completed Task 1.5.3: Test Flask App endpoints.
+- Added `test_task_1_5_3_flask_app_endpoints` to `src/test_phase1_completion.py`.
+- This test uses a Flask test client and mocking to verify the behavior of all API endpoints (`/`, `/api/historical-24hr`, `/api/live-confirmed`, `/api/live-pending`), checking status codes, content types, and data integrity.
+
+All tasks for Phase 1 are now complete.
+
+The Flask application is now working correctly after addressing some client-side JavaScript issues related to URL construction and DOM manipulation when handling empty API responses. The application successfully loads historical data and displays live confirmed and pending transactions.
+
+Ready to proceed to Phase 2: Arbitrage Identification.
 
 ## Lessons
-(To be filled by Executor with learnings, especially fixes to errors or new information)
-- When installing Python on macOS, ensure Homebrew is installed first (`/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`), then install Python (`brew install python`).
-- Install Python packages using `python3 -m pip install <package_name>`. Be mindful of which `python3` is being used if multiple versions are present. The desired Python (e.g., from Homebrew) should be prioritized in the system PATH or called explicitly (e.g. `/opt/homebrew/bin/python3 -m pip install ...`).
-- PyTorch installation via pip: `pip install torch torchvision torchaudio`.
-- The correct Maya Protocol API endpoint for pools is `https://mayanode.mayachain.info/mayachain/pools`. The initially provided `api.mayaprotocol.com` was incorrect or not resolvable.
-- When generating mock data with pandas, ensure `os.makedirs(exist_ok=True)` or an explicit check `if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)` is used to create output directories to prevent errors if the script is run multiple times or the directory doesn't exist.
-- For long-running simulation scripts (like a mempool monitor), include a `try...except KeyboardInterrupt` block to handle graceful shutdown when the user presses Ctrl+C.
-- When preprocessing data for sequences: clearly define features to include. Convert timestamps to numerical representations (e.g., Unix epoch seconds) before scaling. Map categorical string features to numerical indices. For unique IDs like `arb_ID`, they are generally not embedded directly for generalization; instead, use them as identifiers or extract structured features if available. Use `torch.tensor()` to convert NumPy arrays to PyTorch tensors.
-- The Maya Protocol Midgard API endpoint `https://midgard.mayachain.info/v2/actions` can be used to fetch recent actions (transactions). The `limit` parameter for this endpoint has a maximum value of 50.
-- For managing Python dependencies and avoiding conflicts with system Python (especially on macOS with Homebrew), use virtual environments:
+
+*   Midgard API `/v2/actions` endpoint is paginated with a default/max limit of 50 actions per call. Use `limit` and `offset` parameters for pagination.
+*   Midgard API `/v2/health` endpoint provides `lastAggregated.height` which can be used as the latest confirmed block height.
+*   Actions fetched from `/v2/actions` are generally sorted by height (descending) and then by date/time within the block.
+*   When targeting transactions from a *specific older* block height using pagination (newest first API results), it's crucial to continue fetching pages as long as the actions are newer than or contemporaneous with the target block. Stop pagination once actions *older* than the target block height are encountered.
+*   Verify exact string matches (including trailing spaces or additional words like "API") when writing checks in test scripts that parse stdout.
+*   Pandas `df.to_csv()` on an empty DataFrame creates a file with only the header row (assuming `index=False` and `header=True`). It's good practice to explicitly define columns for the DataFrame to ensure consistent CSV headers, especially if the DataFrame might be empty.
+*   **Testing Environment**: Discrepancies between local file state and the state used by automated test runners can lead to confusing test failures (e.g., debug prints not appearing, file creation behaving unexpectedly). Ensure the environment is using the latest code for tests.
+*   When installing Python on macOS, ensure Homebrew is installed first (`/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`), then install Python (`brew install python`).
+*   Install Python packages using `python3 -m pip install <package_name>`. Be mindful of which `python3` is being used if multiple versions are present. The desired Python (e.g., from Homebrew) should be prioritized in the system PATH or called explicitly (e.g. `/opt/homebrew/bin/python3 -m pip install ...`).
+*   PyTorch installation via pip: `pip install torch torchvision torchaudio`.
+*   The correct Maya Protocol API endpoint for pools is `https://mayanode.mayachain.info/mayachain/pools`. The initially provided `api.mayaprotocol.com` was incorrect or not resolvable.
+*   When generating mock data with pandas, ensure `os.makedirs(exist_ok=True)` or an explicit check `if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)` is used to create output directories to prevent errors if the script is run multiple times or the directory doesn't exist.
+*   For long-running simulation scripts (like a mempool monitor), include a `try...except KeyboardInterrupt` block to handle graceful shutdown when the user presses Ctrl+C.
+*   When preprocessing data for sequences: clearly define features to include. Convert timestamps to numerical representations (e.g., Unix epoch seconds) before scaling. Map categorical string features to numerical indices. For unique IDs like `arb_ID`, they are generally not embedded directly for generalization; instead, use them as identifiers or extract structured features if available. Use `torch.tensor()` to convert NumPy arrays to PyTorch tensors.
+*   **Maya Protocol Midgard API:** The correct public Midgard API endpoint for Maya Protocol is `https://midgard.mayachain.info/v2`. Using a generic or THORChain-specific Midgard endpoint (like one from `ninerealms.com`) will not work for Maya Protocol specific data.
+*   For managing Python dependencies and avoiding conflicts with system Python (especially on macOS with Homebrew), use virtual environments:
   - Create: `python3 -m venv .venv`
   - Install packages: `.venv/bin/python -m pip install <package_name>`
   - Run scripts: `.venv/bin/python your_script.py`
-- Ensure scripts are run with `python3` (or the specific venv python like `.venv/bin/python`) if `python` is not aliased or available. If `ModuleNotFound` errors occur, ensure all dependencies (e.g., `pandas`, `requests`, `scikit-learn`, `torch`) are installed into the active virtual environment. 
+*   Ensure scripts are run with `python3` (or the specific venv python like `.venv/bin/python`) if `python` is not aliased or available. If `ModuleNotFound` errors occur, ensure all dependencies (e.g., `pandas`, `requests`, `scikit-learn`, `torch`) are installed into the active virtual environment.
+*   **Output Buffering with subprocess:** When a Python script run via `subprocess.run` appears to produce no `stdout` or `stderr` despite working correctly when run directly, it might be due to output buffering. Add `flush=True` to `print()` statements in the child script to ensure output is written immediately and captured by the parent process, especially if the child script is terminated by a timeout.
+*   **Midgard API `/v2/actions` Filtering:** When using the Maya Midgard API (`https://midgard.mayachain.info/v2`), attempting to filter `/v2/actions` with both `status=pending` and `type=swap` server-side *may* lead to issues (like the 400 error seen with a different endpoint, or computationally expensive results). It's safer and verified to fetch by `type=swap` and then filter for `action.get('status') == 'pending'` on the client side.
+
+## User Specified Information
+
+<user_provided_data>
+- Include info useful for debugging in the program output.
+- Read the file before you try to edit it.
+- If there are vulnerabilities that appear in the terminal, run npm audit before proceeding
+- Always ask before using the -force git command
+</user_provided_data> 

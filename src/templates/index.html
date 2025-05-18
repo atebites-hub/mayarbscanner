@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maya Protocol Scanner</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Maya Protocol Real-time Scanner</h1>
+    </header>
+    <main>
+        <section id="historical-data">
+            <h2>24-Hour Historical Transactions</h2>
+            <button id="fetch-historical-btn">Load Historical Data</button>
+            <div id="historical-table-container">
+                <!-- Table will be inserted here by JavaScript -->
+                <p>Loading historical data...</p>
+            </div>
+        </section>
+
+        <section id="live-data">
+            <div class="live-column">
+                <h2>Live Confirmed Transactions</h2>
+                <div id="live-confirmed-table-container">
+                    <!-- Table will be inserted here by JavaScript -->
+                    <p>Waiting for live confirmed data...</p>
+                </div>
+            </div>
+            <div class="live-column">
+                <h2>Live Pending Transactions</h2>
+                <div id="live-pending-table-container">
+                    <!-- Table will be inserted here by JavaScript -->
+                    <p>Waiting for live pending data...</p>
+                </div>
+            </div>
+        </section>
+    </main>
+    <footer>
+        <p>Scanner Active</p>
+    </footer>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html> 

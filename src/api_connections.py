@@ -6,6 +6,7 @@ MAYA_API_URL = "https://mayanode.mayachain.info/mayachain/pools"
 COINGECKO_API_URL_PING = "https://api.coingecko.com/api/v3/ping"
 COINGECKO_API_URL_COINLIST = "https://api.coingecko.com/api/v3/coins/list"
 MAYA_MIDGARD_ACTIONS_URL = "https://midgard.mayachain.info/v2/actions"
+MAYA_MIDGARD_HEALTH_URL = "https://midgard.mayachain.info/v2/health"
 # Placeholder for Uniswap - direct REST API for general data is complex.
 # Often requires The Graph or SDKs. For now, we'll simulate or use a general token data endpoint.
 UNISWAP_PLACEHOLDER_INFO = "Uniswap V3 data is typically accessed via The Graph (GraphQL) or SDKs, not a simple REST API endpoint for general pool/transaction data. For specific token price, one might use a service that aggregates this."
@@ -41,10 +42,51 @@ def fetch_api_data(url, api_name, params=None):
         print("-" * 30 + "\n")
 
 # --- New Function to fetch Maya actions ---
-def fetch_recent_maya_actions(limit=10, offset=0):
-    """Fetches recent actions from Maya Protocol's Midgard API."""
-    params = {"limit": limit, "offset": offset}
-    return fetch_api_data(MAYA_MIDGARD_ACTIONS_URL, "Maya Protocol Midgard Actions", params=params)
+def fetch_recent_maya_actions(limit=10, offset=0, height=None, action_type=None):
+    """Fetches recent actions from the Maya Protocol Midgard API.
+    Can be optionally filtered by a specific block height and action type."""
+    print(f"--- Querying Maya Protocol Midgard for Actions (limit={limit}, offset={offset}, height={height or 'any'}, type={action_type or 'any'}) ---")
+    
+    params = {
+        "limit": limit,
+        "offset": offset
+    }
+    if height is not None:
+        params["height"] = height # Add height to params if provided
+    if action_type is not None:
+        params["type"] = action_type # Add type to params if provided
+
+    try:
+        response = requests.get(MAYA_MIDGARD_ACTIONS_URL, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+        # print(f"Successfully fetched {len(data.get('actions', []))} actions.")
+        # print(f"DEBUG: Raw actions data from Midgard (first 500 chars): {str(data)[:500]}")
+        return data
+    except requests.exceptions.RequestException as e:
+        print(f"Error connecting to Maya Protocol Midgard Actions API: {e}")
+        return None
+    finally:
+        print("-" * 30 + "\n")
+
+# --- New Function to get last aggregated block height ---
+def get_maya_last_aggregated_block_height():
+    """Fetches the last aggregated block height from Maya Protocol's Midgard API."""
+    health_data = fetch_api_data(MAYA_MIDGARD_HEALTH_URL, "Maya Protocol Midgard Health")
+    if health_data and isinstance(health_data, dict) and "lastAggregated" in health_data:
+        last_aggregated_height = health_data.get("lastAggregated", {}).get("height")
+        if last_aggregated_height is not None:
+            try:
+                return int(last_aggregated_height)
+            except ValueError:
+                print(f"Error: lastAggregated.height ('{last_aggregated_height}') is not a valid integer.")
+                return None
+        else:
+            print("Error: 'height' not found in lastAggregated data.")
+            return None
+    else:
+        print("Failed to fetch health data or data is not in the expected format.")
+        return None
 
 # --- Main Execution ---
 if __name__ == "__main__":
@@ -73,5 +115,29 @@ if __name__ == "__main__":
         print(f"Successfully fetched {len(maya_actions_data['actions'])} recent Maya actions for testing.")
     else:
         print("Could not fetch Maya actions or data is not in expected format.")
+
+    # Test fetching actions of a specific type
+    maya_swap_actions_data = fetch_recent_maya_actions(limit=3, action_type="swap")
+    if maya_swap_actions_data and isinstance(maya_swap_actions_data, dict) and 'actions' in maya_swap_actions_data:
+        print(f"Successfully fetched {len(maya_swap_actions_data['actions'])} recent Maya swap actions for testing.")
+        # Further check if all returned actions are indeed swaps
+        all_swaps = True
+        for action in maya_swap_actions_data['actions']:
+            if action.get('type') != 'swap':
+                all_swaps = False
+                break
+        if all_swaps:
+            print("All fetched actions are of type swap as expected.")
+        else:
+            print("Error: Not all fetched actions were of type swap when filtered.")
+    else:
+        print("Could not fetch Maya swap actions or data is not in expected format.")
+
+    print("\n--- Testing Fetching Last Aggregated Block Height ---")
+    last_block_height = get_maya_last_aggregated_block_height()
+    if last_block_height is not None:
+        print(f"Last aggregated block height: {last_block_height}")
+    else:
+        print("Failed to get last aggregated block height.")
 
     print("API connection tests finished.") 
