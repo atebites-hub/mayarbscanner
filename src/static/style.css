@@ -100,6 +100,12 @@ button:hover {
     overflow-x: auto; /* Allow horizontal scrolling on small screens */
 }
 
+/* Specific styling for historical table container for vertical scroll */
+#historical-table-container {
+    max-height: 600px; /* Adjust as needed */
+    overflow-y: auto; /* Add vertical scroll if content exceeds max-height */
+}
+
 footer {
     text-align: center;
     padding: 1rem 0;
