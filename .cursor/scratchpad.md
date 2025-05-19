@@ -9,6 +9,7 @@ Initial focus is on fetching and processing transaction data correctly.
 1.  **Real-time Transaction Streaming:** Continuously fetch the latest confirmed and pending transactions from Midgard.
 2.  **Pending Block Construction:** Group incoming pending transactions into a conceptual "pending block."
 3.  **Flask Web Application:** Display the 24-hour historical data, the real-time confirmed transactions, and the pending block data in a web interface.
+4.  **AI Data Preprocessing:** Prepare the collected data for input into machine learning models to identify arbitrage opportunities.
 
 ## Key Challenges and Analysis
 - Accessing and integrating data from multiple APIs (Maya, Uniswap, CoinGecko).
@@ -41,6 +42,13 @@ Initial focus is on fetching and processing transaction data correctly.
     *   Implementing a user-friendly frontend that can display both historical and real-time data effectively.
     *   Ensuring asynchronous operations if needed to prevent blocking while serving live updates.
 - **Comprehensive Testing**: Significantly refactoring `test_phase1_completion.py` to cover the 24-hour fetch, the new real-time streaming logic, pending block construction, and the Flask application's basic functionality. This will likely require advanced mocking for streaming behaviors.
+- **AI Data Preprocessing**:
+    *   **Feature Selection**: Identifying which data points from the fetched transactions (e.g., input/output assets, amounts, transaction types, fees, timestamps) are most relevant for predicting arbitrage. Integrating external price feeds might be necessary.
+    *   **`arb_ID` Definition**: Clarifying what constitutes an "arbitrage ID" in the context of Maya Protocol transactions. This might involve identifying specific patterns (e.g., cyclic trades) or focusing on individual swap profitability.
+    *   **Sequence Construction**: Defining an appropriate sequence length `M` for time-series analysis. Each sequence should represent a series of market events.
+    *   **Categorical Data Handling**: Effectively encoding categorical data like asset names (e.g., `BTC.BTC`, `ETH.ETH`) using techniques like one-hot encoding or learnable embeddings.
+    *   **Normalization**: Scaling numerical features to a consistent range (e.g., using `sklearn.preprocessing.MinMaxScaler` or `StandardScaler`).
+    *   **Data Structure for Model Input**: Ensuring the preprocessed data is in a format suitable for PyTorch models (e.g., tensors).
 
 ## High-level Task Breakdown
 (Revised significantly to reflect new requirements)
@@ -83,6 +91,16 @@ Initial focus is on fetching and processing transaction data correctly.
         *   1.5.1. Test 24-Hour Fetch: Refactor/rewrite `test_task_1_2_realtime_data` in `test_phase1_completion.py` to validate the 24-hour data fetching (Task 1.2), checking for correct timestamp filtering, data integrity, and CSV output. - **DONE**
         *   1.5.2. Test Real-time Streaming (Basic): Design and implement new tests for the core logic of fetching confirmed and pending actions (Task 1.3.2, 1.3.3). This might involve mocking `requests.get` to simulate API responses and checking if the streaming functions process them correctly. Testing continuous polling and pending block updates will be challenging and might be simplified initially.
         *   1.5.3. Test Flask App (Basic): Add new tests (possibly in `test_app.py` or `test_phase1_completion.py`) to check if Flask endpoints (Task 1.4.3) are reachable and return expected data formats (e.g., JSON responses, correct status codes).
+    *   1.6. AI Data Preprocessing
+        *   1.6.1. Define Feature Set for AI Model: Identify relevant features from `historical_24hr_maya_transactions.csv` (e.g., `in_asset`, `in_amount`, `out_asset`, `out_amount`, `fees`, `type`, `date`). Consider if external price data is needed and how it would be integrated at this stage.
+        *   1.6.2. Implement Feature Engineering and Normalization:
+            *   Handle asset names (e.g., map to unique integer IDs, then plan for embeddings later in the model).
+            *   Convert timestamps to a numerical representation (e.g., seconds since epoch or time differences).
+            *   Normalize numerical features (amounts, engineered time features).
+            *   Create a preliminary definition of what an `arb_ID` or a sequence representing a potential arbitrage event might look like based on available transaction data.
+        *   1.6.3. Develop Sequence Generation Logic: Write functions to take the processed transaction data and create sequences of length `M` (e.g., `M=10` transactions). Each item in a sequence would be a vector of features from a single transaction.
+        *   1.6.4. Prepare Data for PyTorch Models: Ensure the output of sequence generation can be easily converted into PyTorch tensors (e.g., list of lists of floats, NumPy arrays).
+        *   1.6.5. Initial Data Preprocessing Script: Create a new script (e.g., `src/preprocess_ai_data.py`) that loads `data/historical_24hr_maya_transactions.csv`, applies the feature engineering, normalization, and sequence generation, and can save or return the processed data.
 
 *   **Phase 2: Arbitrage Identification** (Will use data from Phase 1)
     *   (Sub-tasks remain largely the same as previously defined, but will operate on the new data sources)
@@ -92,7 +110,7 @@ Initial focus is on fetching and processing transaction data correctly.
 
 ## Project Status Board
 
-**Current Overall Progress: Phase 1 - Core Data Engine and Initial Display is COMPLETE. Ready to start Phase 2.**
+**Current Overall Progress: Phase 1 - Core Data Engine and Initial Display is COMPLETE. All preprocessing and data engineering tasks are finished. Ready to proceed to Phase 2: Model Development.**
 
 *   [x] **Phase 1: Core Data Engine and Initial Display**
     *   [x] 1.1. Setup Python Environment & Dependencies (Pandas, Requests, Flask)
@@ -121,68 +139,18 @@ Initial focus is on fetching and processing transaction data correctly.
         *   [x] 1.5.1. Refactor/Rewrite tests for 24-Hour Fetch logic.
         *   [x] 1.5.2. Design and implement tests for Real-time Streaming logic.
         *   [x] 1.5.3. Design and implement tests for Flask App endpoints.
-*   [ ] **Phase 2: Arbitrage Identification** (All sub-tasks pending)
+    *   [x] 1.6. AI Data Preprocessing
+        *   [x] 1.6.1. Define Feature Set for AI Model
+        *   [x] 1.6.2. Implement Feature Engineering and Normalization
+        *   [x] 1.6.3. Develop Sequence Generation Logic
+        *   [x] 1.6.4. Prepare Data for PyTorch Models
+        *   [x] 1.6.5. Initial Data Preprocessing Script
+*   [ ] **Phase 2: Model Development** (All sub-tasks pending)
 *   [ ] **Phase 3: Reporting and Simulation** (All sub-tasks pending)
 
 ## Executor's Feedback or Assistance Requests
 
-Completed Task 1.2 (24-Hour Historical Data Fetch) and Task 1.5.1 (Update Test Suite for 24-Hour Fetch).
-- `src/fetch_realtime_transactions.py` modified for 24-hour data fetching.
-- `src/test_phase1_completion.py` updated to test the new 24-hour fetching logic.
-
-Completed Task 1.3.1 (Design Data Structures for Streaming):
-- Created `src/common_utils.py` with `parse_action` and `DF_COLUMNS`.
-- Updated `src/fetch_realtime_transactions.py` to use `common_utils.py`.
-- Created `src/realtime_stream_manager.py` with `RealtimeStreamManager` class structure and data stores.
-
-Completed Task 1.3.2 (Confirmed Actions Stream):
-- Implemented `poll_confirmed_actions` method in `RealtimeStreamManager`.
-
-Completed Task 1.3.3 (Pending Actions Stream):
-- Implemented `poll_pending_actions` method in `RealtimeStreamManager`, including logic for pruning stale actions.
-
-Tasks 1.3.4 (Pending Block Management) and 1.3.5 (Data Aggregation) are considered complete as their core logic is integrated into the `RealtimeStreamManager` and its polling methods.
-
-Completed Task 1.3.6 (Implement Threaded Polling):
-- Implemented threaded, continuous polling in `RealtimeStreamManager` using `start_streaming` and `stop_streaming` methods.
-
-Task 1.3 is now complete.
-
-Verified Task 1.4.1 (Basic Flask App Setup) is complete.
-
-Completed Task 1.4.2 (Data Access Layer):
-- Integrated `RealtimeStreamManager` into `src/app.py`.
-- Added `get_historical_transactions()` function to load CSV data.
-- Implemented `atexit` handler for graceful shutdown of the stream manager.
-
-Completed Task 1.4.3 (Flask Endpoints):
-- Added `/api/historical-24hr`, `/api/live-confirmed`, and `/api/live-pending` endpoints to `src/app.py`.
-
-Completed Task 1.4.4 (Frontend Design):
-- Created `src/templates/index.html` with basic structure.
-- Created `src/static/style.css` for styling.
-- Created placeholder `src/static/script.js`.
-- Updated `src/app.py` to serve `index.html`.
-
-Completed Task 1.4.5 (Frontend Data Fetching):
-- Implemented JavaScript in `src/static/script.js` to fetch and display data from API endpoints, including periodic updates for live data.
-
-Task 1.4 is now complete.
-Proceeding to Task 1.5.2: Test Real-time Streaming logic.
-
-Completed Task 1.5.2: Test Real-time Streaming logic.
-- Enhanced `test_task_1_3_realtime_stream_manager` in `src/test_phase1_completion.py` with more detailed scenarios for `RealtimeStreamManager`'s polling methods (confirmed and pending actions), including edge cases and error handling.
-- Improved threading tests to verify that polling methods are actively called.
-
-Completed Task 1.5.3: Test Flask App endpoints.
-- Added `test_task_1_5_3_flask_app_endpoints` to `src/test_phase1_completion.py`.
-- This test uses a Flask test client and mocking to verify the behavior of all API endpoints (`/`, `/api/historical-24hr`, `/api/live-confirmed`, `/api/live-pending`), checking status codes, content types, and data integrity.
-
-All tasks for Phase 1 are now complete.
-
-The Flask application is now working correctly after addressing some client-side JavaScript issues related to URL construction and DOM manipulation when handling empty API responses. The application successfully loads historical data and displays live confirmed and pending transactions.
-
-Ready to proceed to Phase 2: Arbitrage Identification.
+All tasks for Phase 1, including AI Data Preprocessing, are now complete. The project is ready to proceed to Phase 2: Model Development. All processed data files are available in `data/processed_ai_data/`.
 
 ## Lessons
 
