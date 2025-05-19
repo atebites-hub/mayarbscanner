@@ -1,1 +1,57 @@
-# Maya Protocol Arbitrage Scanner\n\n## Project Overview\nThis project is a scanner for arbitrage opportunities on Maya Protocol. It fetches real-time transaction data, identifies potential arbitrage opportunities by comparing input and output values against market prices, and provides a web interface for monitoring. The project is being developed in multiple phases:\n\n- **Phase 1: Data Collection and Preprocessing** (COMPLETE)\n    - Fetches all actions (transactions) from Maya Protocol's Midgard API for the last 24 hours.\n    - Streams real-time confirmed and pending transactions.\n    - Groups pending transactions into a conceptual \"pending block.\"\n    - Provides a Flask web application to display historical, live confirmed, and pending transaction data.\n    - Implements an AI preprocessing pipeline to prepare data for model training.\n- **Phase 2: Model Development** (NEXT)\n    - Build and train a transformer-based model to predict arbitrage opportunities.\n- **Phase 3: Reporting and Simulation**\n    - Simulate and report on arbitrage strategies using the trained model.\n\n## Phase 1 Deliverables\n- **Historical Data:**\n    - `data/historical_24hr_maya_transactions.csv`: All Maya Protocol actions from the last 24 hours.\n- **Real-Time Streaming:**\n    - `src/realtime_stream_manager.py`: Streams confirmed and pending actions from the Midgard API.\n- **Web Application:**\n    - `src/app.py`: Flask app serving endpoints and a dashboard for historical and live data.\n    - `src/templates/index.html`, `src/static/style.css`, `src/static/script.js`: Frontend files for the dashboard.\n- **AI Preprocessing Pipeline:**\n    - `src/preprocess_ai_data.py`: Loads historical data, performs feature engineering, normalization, and sequence generation for AI model input.\n    - **Output files (in `data/processed_ai_data/`):**\n        - `sequences.npy`: 3D NumPy array of transaction sequences for model training.\n        - `sequence_transaction_ids.json`: List of transaction IDs for each sequence.\n        - `asset_to_id.json`, `type_to_id.json`, `status_to_id.json`: Mappings for categorical features.\n        - `scaler.pkl`: Fitted scaler for normalizing features.\n\n## Current Status\n- **Phase 1 is complete.** All data engineering, streaming, web, and preprocessing components are functional.\n- **Ready to begin Phase 2: Model Development.**\n\n## Getting Started\n1. Install dependencies in a virtual environment:\n    ```bash\n    python3 -m venv .venv\n    .venv/bin/pip install -r requirements.txt\n    ```\n2. Fetch historical and real-time data:\n    ```bash\n    .venv/bin/python src/fetch_realtime_transactions.py\n    ```\n3. Run the AI preprocessing pipeline:\n    ```bash\n    .venv/bin/python src/preprocess_ai_data.py\n    ```\n4. Start the Flask web app:\n    ```bash\n    .venv/bin/python src/app.py\n    ```\n\n## Next Steps\n- Implement and train the transformer-based arbitrage prediction model (Phase 2).\n- See `Docs/Implementation Plan.md` for detailed phase breakdowns.\n
+# mayarbscanner
+Next generation transactions predictor transformer model for the Maya blockchain.
+
+## Project Overview
+
+This project aims to build a sophisticated scanner for identifying potential arbitrage opportunities on the Maya Protocol. It involves several key components:
+
+1.  **Data Collection**: Fetching historical and real-time transaction data from the Maya Protocol's Midgard API.
+2.  **Data Streaming & Web UI**: Continuously streaming new transactions (confirmed and pending) and displaying this data, along with historical transactions, in a Flask-based web application.
+3.  **AI Data Preprocessing**: Transforming raw transaction data into a format suitable for machine learning models, including feature engineering, normalization, and sequence generation.
+4.  **Arbitrage Prediction Model**: Developing a model (e.g., using Transformers) to predict potential arbitrage opportunities based on the processed transaction sequences.
+5.  **Reporting & Simulation**: Implementing mechanisms to report identified opportunities and potentially simulate trading strategies.
+
+## Current Status
+
+**Phase 1: Core Data Engine, Initial Display, and AI Preprocessing - COMPLETE**
+
+We have successfully completed the first phase of the project, which includes:
+
+*   **Historical Data Fetching**: Implemented scripts to fetch all Maya Protocol actions from the last 24 hours and store them.
+*   **Real-time Data Streaming**: Developed a `RealtimeStreamManager` to continuously poll for new confirmed and pending transactions from the Midgard API.
+*   **Pending Block Construction**: Logic to manage a conceptual "pending block" of transactions.
+*   **Flask Web Application**: A web interface (`app.py`) that displays:
+    *   24-hour historical transaction data.
+    *   A live feed of confirmed transactions.
+    *   A live feed of pending transactions.
+*   **AI Data Preprocessing**: Created a pipeline (`src/preprocess_ai_data.py`) that:
+    *   Loads the 24-hour historical data.
+    *   Performs feature engineering (handles categorical data, normalizes numerical data, creates time-based features).
+    *   Generates sequences of transactions (length M=10) suitable for time-series modeling.
+    *   Saves the processed data (sequences, mappings, scaler) for use in model training.
+*   **Testing**: Initial test suites for data fetching, streaming, and Flask endpoints have been implemented.
+
+**Next Steps: Phase 2 - Arbitrage Identification (Model Development)**
+
+Phase 2 will focus on building the core machine learning model to identify arbitrage opportunities. Key tasks will include:
+
+*   Defining the Transformer encoder architecture.
+*   Implementing the prediction mechanism (e.g., predicting profitability or likelihood of an arbitrage).
+*   Developing the training loop and custom loss functions.
+*   Training the model on the preprocessed data from Phase 1.
+
+## Project Structure
+
+*   `src/`: Contains the main source code for data fetching, preprocessing, streaming, and the Flask web application.
+*   `data/`: Intended for storing raw and processed data. 
+    *   `data/historical_24hr_maya_transactions.csv`: Stores raw transaction data fetched from Midgard.
+    *   `data/processed_ai_data/`: Contains AI-ready data, including `sequences.npy`, feature mappings, and the data scaler.
+*   `templates/`: HTML templates for the Flask application.
+*   `static/`: Static assets (CSS, JavaScript) for the Flask application.
+*   `Docs/`: Project documentation, including requirements and implementation plans.
+*   `.venv/`: Python virtual environment.
+*   `README.md`: This file.
+
+## Setup and Running
+
+(Instructions to be added once the application is more mature and ready for easier standalone execution, including dependency installation and running the web server and other components.)

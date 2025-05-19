@@ -110,7 +110,7 @@ Initial focus is on fetching and processing transaction data correctly.
 
 ## Project Status Board
 
-**Current Overall Progress: Phase 1 - Core Data Engine and Initial Display is COMPLETE. All preprocessing and data engineering tasks are finished. Ready to proceed to Phase 2: Model Development.**
+**Current Overall Progress: Phase 1 - Core Data Engine and Initial Display, including AI Data Preprocessing, is COMPLETE. Ready to start Phase 2.**
 
 *   [x] **Phase 1: Core Data Engine and Initial Display**
     *   [x] 1.1. Setup Python Environment & Dependencies (Pandas, Requests, Flask)
@@ -145,12 +145,87 @@ Initial focus is on fetching and processing transaction data correctly.
         *   [x] 1.6.3. Develop Sequence Generation Logic
         *   [x] 1.6.4. Prepare Data for PyTorch Models
         *   [x] 1.6.5. Initial Data Preprocessing Script
-*   [ ] **Phase 2: Model Development** (All sub-tasks pending)
+*   [ ] **Phase 2: Arbitrage Identification** (All sub-tasks pending)
 *   [ ] **Phase 3: Reporting and Simulation** (All sub-tasks pending)
 
 ## Executor's Feedback or Assistance Requests
 
-All tasks for Phase 1, including AI Data Preprocessing, are now complete. The project is ready to proceed to Phase 2: Model Development. All processed data files are available in `data/processed_ai_data/`.
+Completed Task 1.2 (24-Hour Historical Data Fetch) and Task 1.5.1 (Update Test Suite for 24-Hour Fetch).
+- `src/fetch_realtime_transactions.py` modified for 24-hour data fetching.
+- `src/test_phase1_completion.py` updated to test the new 24-hour fetching logic.
+
+Completed Task 1.3.1 (Design Data Structures for Streaming):
+- Created `src/common_utils.py` with `parse_action` and `DF_COLUMNS`.
+- Updated `src/fetch_realtime_transactions.py` to use `common_utils.py`.
+- Created `src/realtime_stream_manager.py` with `RealtimeStreamManager` class structure and data stores.
+
+Completed Task 1.3.2 (Confirmed Actions Stream):
+- Implemented `poll_confirmed_actions` method in `RealtimeStreamManager`.
+
+Completed Task 1.3.3 (Pending Actions Stream):
+- Implemented `poll_pending_actions` method in `RealtimeStreamManager`, including logic for pruning stale actions.
+
+Tasks 1.3.4 (Pending Block Management) and 1.3.5 (Data Aggregation) are considered complete as their core logic is integrated into the `RealtimeStreamManager` and its polling methods.
+
+Completed Task 1.3.6 (Implement Threaded Polling):
+- Implemented threaded, continuous polling in `RealtimeStreamManager` using `start_streaming` and `stop_streaming` methods.
+
+Task 1.3 is now complete.
+
+Verified Task 1.4.1 (Basic Flask App Setup) is complete.
+
+Completed Task 1.4.2 (Data Access Layer):
+- Integrated `RealtimeStreamManager` into `src/app.py`.
+- Added `get_historical_transactions()` function to load CSV data.
+- Implemented `atexit` handler for graceful shutdown of the stream manager.
+
+Completed Task 1.4.3 (Flask Endpoints):
+- Added `/api/historical-24hr`, `/api/live-confirmed`, and `/api/live-pending` endpoints to `src/app.py`.
+
+Completed Task 1.4.4 (Frontend Design):
+- Created `src/templates/index.html` with basic structure.
+- Created `src/static/style.css` for styling.
+- Created placeholder `src/static/script.js`.
+- Updated `src/app.py` to serve `index.html`.
+
+Completed Task 1.4.5 (Frontend Data Fetching):
+- Implemented JavaScript in `src/static/script.js` to fetch and display data from API endpoints, including periodic updates for live data.
+
+Task 1.4 is now complete.
+Proceeding to Task 1.5.2: Test Real-time Streaming logic.
+
+Completed Task 1.5.2: Test Real-time Streaming logic.
+- Enhanced `test_task_1_3_realtime_stream_manager` in `src/test_phase1_completion.py` with more detailed scenarios for `RealtimeStreamManager`'s polling methods (confirmed and pending actions), including edge cases and error handling.
+- Improved threading tests to verify that polling methods are actively called.
+
+Completed Task 1.5.3: Test Flask App endpoints.
+- Added `test_task_1_5_3_flask_app_endpoints` to `src/test_phase1_completion.py`.
+- This test uses a Flask test client and mocking to verify the behavior of all API endpoints (`/`, `/api/historical-24hr`, `/api/live-confirmed`, `/api/live-pending`), checking status codes, content types, and data integrity.
+
+All tasks for Phase 1 are now complete.
+
+The Flask application is now working correctly after addressing some client-side JavaScript issues related to URL construction and DOM manipulation when handling empty API responses. The application successfully loads historical data and displays live confirmed and pending transactions.
+
+Ready to proceed to Phase 2: Arbitrage Identification.
+**Planner Update:** Phase 1 is being extended to include AI Data Preprocessing tasks.
+
+**Executor Update (Task 1.6 - AI Data Preprocessing):**
+Completed all sub-tasks for Task 1.6:
+- **1.6.1 (Define Feature Set):** Identified key features from `historical_24hr_maya_transactions.csv` for the initial model: `date`, `status`, `type`, `pools`, `in_asset`, `in_amount`, `out_asset`, `out_amount`, `swap_liquidity_fee`, `swap_slip_bps`, `swap_network_fee_asset`, `swap_network_fee_amount`, `transaction_id`.
+- **1.6.2 (Feature Engineering & Normalization):** Implemented in `src/preprocess_ai_data.py`.
+    - Loaded data, converted amounts/dates to numeric.
+    - Created mappings for categorical features (assets, types, status) to integer IDs, saved to JSON files in `data/processed_ai_data/` (e.g., `asset_to_id.json`). Handled `PAD` and `UNK` tokens.
+    - Engineered time features: `timestamp_norm` (from epoch seconds) and `time_delta_norm` (difference from previous transaction).
+    - Applied `MinMaxScaler` to numerical features (`_norm` suffixed columns), scaler saved to `data/processed_ai_data/scaler.pkl`.
+- **1.6.3 (Sequence Generation Logic):** Implemented `generate_sequences` function in `src/preprocess_ai_data.py`.
+    - Creates sequences of length `M=10`.
+    - Handles padding for sequences at the beginning of the dataset.
+    - Returns a 3D NumPy array and corresponding transaction IDs.
+- **1.6.4 (Prepare for PyTorch):** The output NumPy array from sequence generation is directly usable for PyTorch models.
+- **1.6.5 (Initial Data Preprocessing Script):** `src/preprocess_ai_data.py` is now a runnable script that performs all preprocessing steps: loads raw data, engineers features, generates sequences, and saves the processed sequences (`sequences.npy`), transaction IDs (`sequence_transaction_ids.json`), mappings, and the scaler to the `data/processed_ai_data/` directory.
+
+Next step would be to run `src/preprocess_ai_data.py` to generate the processed data files, then move to Phase 2. The script also needs testing.
+**Executor Update:** Successfully ran `src/preprocess_ai_data.py`. All processed data files (sequences, mappings, scaler) have been generated in `data/processed_ai_data/`. Phase 1 is now complete.
 
 ## Lessons
 
