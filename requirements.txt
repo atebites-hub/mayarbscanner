@@ -1,0 +1,11 @@
+flask
+numpy
+pandas
+scikit-learn
+torch
+torchaudio
+torchvision
+pycoingecko
+requests
+matplotlib
+seaborn 

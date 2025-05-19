@@ -1,16 +1,16 @@
 import pandas as pd
 import os
 import time
+import argparse # Added
 from api_connections import fetch_recent_maya_actions # Removed get_maya_last_aggregated_block_height as it's not directly used for 24hr fetch
 from common_utils import parse_action, DF_COLUMNS # Import from common_utils
 
 OUTPUT_DIR = "data"
-# Update output file name
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, "historical_24hr_maya_transactions.csv")
+# OUTPUT_FILE = os.path.join(OUTPUT_DIR, "historical_24hr_maya_transactions.csv") # Will be set by args
 FETCH_ACTION_BATCH_SIZE = 50
 # MAX_PAGINATION_PAGES_TO_SCAN = 5 # Not strictly needed for 24hr scan, we go by time
 # MAX_ACTIONS_TO_SAVE = 100    # Not needed, save all from 24hr window
-MAX_PAGES_FOR_24_HOUR_SCAN = 200 # Safety break for pagination, 200 pages * 50 actions/page = 10,000 actions
+MAX_PAGES_FOR_TIME_WINDOW_SCAN = 400 # Safety break: 400 pages * 50 = 20,000 actions
 
 # def parse_action(action): # Removed: Will use from common_utils
 #     """Parses a single action from Midgard API into a flat dictionary."""
@@ -68,32 +68,51 @@ MAX_PAGES_FOR_24_HOUR_SCAN = 200 # Safety break for pagination, 200 pages * 50 a
 #     "swap_network_fee_amount", "transaction_id"
 # ]
 
-def main():
+def main(args): # Added args parameter
+    output_file = args.output_file # Use arg
+    hours_ago_start = args.hours_ago_start # Use arg
+    duration_hours = args.duration_hours # Use arg
+
     if not os.path.exists(OUTPUT_DIR):
         os.makedirs(OUTPUT_DIR)
         print(f"Created directory: {OUTPUT_DIR}", flush=True)
-    elif os.path.exists(OUTPUT_FILE):
+    
+    output_file_path = os.path.join(OUTPUT_DIR, output_file) # Construct full path
+
+    if os.path.exists(output_file_path):
         try:
-            os.remove(OUTPUT_FILE)
-            print(f"Removed existing output file: {OUTPUT_FILE}", flush=True)
+            os.remove(output_file_path)
+            print(f"Removed existing output file: {output_file_path}", flush=True)
         except OSError as e:
-            print(f"Error removing existing file {OUTPUT_FILE}: {e}.", flush=True)
+            print(f"Error removing existing file {output_file_path}: {e}.", flush=True)
 
-    # Calculate timestamp for 24 hours ago (in nanoseconds)
-    # Midgard 'date' is a Unix timestamp in nanoseconds as a string.
     now_ns = time.time_ns()
-    twenty_four_hours_ago_ns = now_ns - (24 * 60 * 60 * 1_000_000_000)
+    # Calculate the end of the window (e.g., 24 hours ago from now)
+    window_end_ns = now_ns - (hours_ago_start * 60 * 60 * 1_000_000_000)
+    # Calculate the start of the window (e.g., 24 hours prior to window_end_ns)
+    window_start_ns = window_end_ns - (duration_hours * 60 * 60 * 1_000_000_000)
 
-    print(f"Fetching all actions from Maya Protocol from the last 24 hours (since timestamp: {twenty_four_hours_ago_ns}).", flush=True)
+    print(f"Fetching actions from Maya Protocol for a {duration_hours}-hour window starting {hours_ago_start + duration_hours} hours ago and ending {hours_ago_start} hours ago.", flush=True)
+    print(f"Time window: {window_start_ns} ns to {window_end_ns} ns.", flush=True)
     
     all_actions_in_window = []
     current_offset = 0
     pages_fetched = 0
     stop_fetching = False
+    # Heuristic: Start scanning from a point slightly before our window_end_ns might suggest.
+    # Midgard API gives latest first. We need to go back in time.
+    # The `offset` parameter is key. We keep fetching pages until the oldest action in a batch
+    # is older than our `window_start_ns`.
 
-    while pages_fetched < MAX_PAGES_FOR_24_HOUR_SCAN and not stop_fetching:
+    # The logic needs to ensure we capture actions *within* the [window_start_ns, window_end_ns] range.
+    # We paginate backwards in time.
+    # We stop fetching a page if ALL transactions in that page are older than window_start_ns.
+    # We also stop if the NEWEST transaction in a page is older than window_start_ns (implies we passed the window).
+    # More robust: keep fetching as long as some part of the batch could be in the window.
+    # Stop when oldest_action_in_batch_date_ns < window_start_ns.
+
+    while pages_fetched < MAX_PAGES_FOR_TIME_WINDOW_SCAN and not stop_fetching:
         print(f"Fetching actions page {pages_fetched + 1} (offset: {current_offset}, limit: {FETCH_ACTION_BATCH_SIZE})...", flush=True)
-        # We don't filter by height here, we filter by timestamp client-side
         actions_data = fetch_recent_maya_actions(limit=FETCH_ACTION_BATCH_SIZE, offset=current_offset)
         pages_fetched += 1
 
@@ -103,73 +122,91 @@ def main():
             break
         
         current_batch_actions = actions_data["actions"]
-        if not current_batch_actions: # Should be caught by the above, but defensive
+        if not current_batch_actions:
             print("API returned an empty 'actions' list. Assuming end of feed.", flush=True)
             stop_fetching = True
             break
         
         print(f"Fetched {len(current_batch_actions)} actions on page {pages_fetched}.", flush=True)
         
-        oldest_action_in_batch_date_ns = 0
+        # Track the timestamps of actions in the current batch
+        newest_action_in_batch_date_ns = 0
+        oldest_action_in_batch_date_ns = float('inf') # Initialize with infinity
+        actions_to_add_from_this_batch = []
+
         for action in current_batch_actions:
             action_date_str = action.get("date")
             if action_date_str:
                 try:
                     action_date_ns = int(action_date_str)
-                    if action_date_ns >= twenty_four_hours_ago_ns:
-                        all_actions_in_window.append(action)
-                    # Update the oldest timestamp seen in this batch to check for pagination cutoff
-                    if oldest_action_in_batch_date_ns == 0 or action_date_ns < oldest_action_in_batch_date_ns:
+                    
+                    # Update batch boundary timestamps
+                    if action_date_ns > newest_action_in_batch_date_ns:
+                        newest_action_in_batch_date_ns = action_date_ns
+                    if action_date_ns < oldest_action_in_batch_date_ns:
                          oldest_action_in_batch_date_ns = action_date_ns
+
+                    # Check if the action falls within our desired time window
+                    if window_start_ns <= action_date_ns < window_end_ns: # Use < for window_end_ns to make it exclusive end
+                        actions_to_add_from_this_batch.append(action)
                 except ValueError:
                     print(f"Warning: Could not parse date string '{action_date_str}' to int for action.", flush=True)
-                    continue # Skip this action if date is unparseable
+                    continue
         
-        if oldest_action_in_batch_date_ns == 0 and current_batch_actions: # All actions in batch had bad dates
-             print("Warning: All actions in the current batch had unparseable dates. Cannot determine if we should continue. Stopping to be safe.", flush=True)
-             stop_fetching = True # Safety break if we can't determine age
-             break
+        all_actions_in_window.extend(actions_to_add_from_this_batch)
 
-        if oldest_action_in_batch_date_ns < twenty_four_hours_ago_ns:
-            print(f"Oldest action in batch (date: {oldest_action_in_batch_date_ns}) is older than 24-hour window. Stopping pagination.", flush=True)
+        if oldest_action_in_batch_date_ns == float('inf') and current_batch_actions: 
+             print("Warning: All actions in the current batch had unparseable dates. Cannot determine if we should continue. Stopping to be safe.", flush=True)
+             stop_fetching = True
+             break
+        
+        # Stop condition: if the oldest action in the current batch is already older than our window's start time,
+        # then subsequent pages (even older actions) will definitely be outside our window.
+        if oldest_action_in_batch_date_ns < window_start_ns:
+            print(f"Oldest action in current batch (timestamp: {oldest_action_in_batch_date_ns}) is older than the target window start ({window_start_ns}). Stopping pagination.", flush=True)
             stop_fetching = True
         
         if len(current_batch_actions) < FETCH_ACTION_BATCH_SIZE:
-            print(f"Fetched fewer actions ({len(current_batch_actions)}) than limit ({FETCH_ACTION_BATCH_SIZE}). Assuming end of API data.", flush=True)
-            stop_fetching = True # No more data
+            print(f"Fetched fewer actions ({len(current_batch_actions)}) than limit ({FETCH_ACTION_BATCH_SIZE}). Assuming end of API data for this period.", flush=True)
+            stop_fetching = True
         
         if not stop_fetching:
             current_offset += FETCH_ACTION_BATCH_SIZE
-            time.sleep(0.5) # Be respectful to the API
+            time.sleep(0.5)
 
-    print(f"Collected a total of {len(all_actions_in_window)} actions from the last 24 hours after scanning {pages_fetched} pages.", flush=True)
+    print(f"Collected a total of {len(all_actions_in_window)} actions within the specified time window after scanning {pages_fetched} pages.", flush=True)
     
     if not all_actions_in_window:
-        print(f"No actions found within the last 24 hours.", flush=True)
+        print(f"No actions found within the specified time window.", flush=True)
         df = pd.DataFrame(columns=DF_COLUMNS)
     else:
         print(f"Parsing {len(all_actions_in_window)} collected actions...", flush=True)
+        # Sort actions by date (ascending) before parsing, good practice though parse_action is per action
+        all_actions_in_window.sort(key=lambda x: int(x.get("date", "0")))
         parsed_actions = [parse_action(action) for action in all_actions_in_window]
         df = pd.DataFrame(parsed_actions, columns=DF_COLUMNS)
-        # Convert date column from string nanoseconds to more readable format or keep as is for precision
-        # For now, keeping as nanosecond string as per original parsing.
-        # If conversion to datetime is needed later:
-        # df['date'] = pd.to_datetime(df['date'].astype(float), unit='ns')
 
-    print(f"DEBUG: DataFrame created with {len(df)} rows. About to save to CSV: {OUTPUT_FILE}", flush=True)
+    print(f"DEBUG: DataFrame created with {len(df)} rows. About to save to CSV: {output_file_path}", flush=True)
     try:
-        df.to_csv(OUTPUT_FILE, index=False)
-        print(f"DEBUG: df.to_csv call completed for {OUTPUT_FILE}.", flush=True)
+        df.to_csv(output_file_path, index=False)
+        print(f"DEBUG: df.to_csv call completed for {output_file_path}.", flush=True)
         if df.empty:
-            print(f"Successfully saved an empty CSV (no relevant actions found in the last 24 hours) to {OUTPUT_FILE}", flush=True)
+            print(f"Successfully saved an empty CSV (no relevant actions found in the window) to {output_file_path}", flush=True)
         else:
-            # For nanosecond strings, min/max might not be directly comparable without conversion
-            # For simplicity, we'll just report count.
-            print(f"Successfully saved {len(df)} actions from the last 24 hours to {OUTPUT_FILE}", flush=True)
+            print(f"Successfully saved {len(df)} actions from the specified time window to {output_file_path}", flush=True)
     except Exception as e:
-        print(f"ERROR: Failed to save DataFrame to CSV {OUTPUT_FILE}. Error: {e}", flush=True)
+        print(f"ERROR: Failed to save DataFrame to CSV {output_file_path}. Error: {e}", flush=True)
     
-    time.sleep(1) # Small delay before script exits
+    time.sleep(1)
 
 if __name__ == "__main__":
-    main() 
+    parser = argparse.ArgumentParser(description="Fetch Maya Protocol actions for a specified time window.")
+    parser.add_argument("--output-file", type=str, default="historical_transactions.csv", 
+                        help="Name of the output CSV file to be saved in the 'data/' directory.")
+    parser.add_argument("--hours-ago-start", type=int, default=24, 
+                        help="Defines the end of the fetching window, in hours ago from now. E.g., 24 means the window ends 24 hours ago.")
+    parser.add_argument("--duration-hours", type=int, default=24, 
+                        help="Duration of the fetching window in hours, extending backwards from 'hours-ago-start'. E.g., if hours-ago-start is 24 and duration is 24, it fetches data from 48 hours ago to 24 hours ago.")
+    
+    cli_args = parser.parse_args()
+    main(cli_args) 

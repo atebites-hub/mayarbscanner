@@ -1,262 +1,231 @@
-# Project Scratchpad
+# .cursor/scratchpad.md - Maya Protocol Arbitrage Scanner
 
 ## Background and Motivation
-The user wants to create a scanner for arbitrage opportunities on Maya Protocol. This involves fetching real-time transaction data, identifying potential arbitrage opportunities by comparing input and output values against market prices, and then potentially simulating or executing trades.
 
-Initial focus is on fetching and processing transaction data correctly.
-**Update for Task 1.2 (Major Revision):** The requirement has changed significantly. The goal is now to fetch **all actions (transactions) from Maya Protocol's Midgard API that have occurred within the last 24 hours**. These actions will then be processed and saved.
-**Further Expansion:** The project will also include:
-1.  **Real-time Transaction Streaming:** Continuously fetch the latest confirmed and pending transactions from Midgard.
-2.  **Pending Block Construction:** Group incoming pending transactions into a conceptual "pending block."
-3.  **Flask Web Application:** Display the 24-hour historical data, the real-time confirmed transactions, and the pending block data in a web interface.
-4.  **AI Data Preprocessing:** Prepare the collected data for input into machine learning models to identify arbitrage opportunities.
+The project aims to build an arbitrage scanner for the Maya Protocol. This involves fetching historical and real-time transaction data, preprocessing it for an AI model, and using that model to predict arbitrage opportunities. A Flask web UI will display the data and insights.
+
+Phase 1 (Data Fetching & Initial UI) is complete. We are currently in Phase 2 (Model Development).
+
+A key clarification has been made:
+-   **Arbitrage transactions (`ARB_SWAP`)** are SWAP transactions that *do not* have an `affiliate_id`.
+-   **User swaps (`USER_SWAP`)** are SWAP transactions that *do* have an `affiliate_id`.
+
+This new logic, along with a switch from Uniswap to CoinGecko for external price data, has led to a significant refactoring of `src/preprocess_ai_data.py`.
 
 ## Key Challenges and Analysis
-- Accessing and integrating data from multiple APIs (Maya, Uniswap, CoinGecko).
-- Handling potentially large volumes of historical and real-time data.
-- Ensuring the data preprocessing pipeline is robust and efficient.
-- Setting up a reliable mempool monitoring mechanism.
-- Installing and managing dependencies like Python and PyTorch.
-- **API Interaction**: Understanding the Midgard API, its endpoints, rate limits, and data structures is crucial.
-- **Data Parsing**: Extracting relevant information (assets, amounts, transaction IDs, types) from complex JSON responses.
-- **Arbitrage Logic**: Defining what constitutes an arbitrage opportunity and how to calculate potential profit (ΔX), considering fees and slippage. This will require price data.
-- **Real-time Processing**: Efficiently handling incoming data to identify opportunities quickly.
-- **Midgard API Behavior for Specific Block Data**: The primary challenge for fetching transactions from a *specific* historical block (e.g., `last_confirmed_height - 1`) is that the Midgard `/v2/actions` endpoint has proven difficult to use for this exact purpose.
-    *   Using the `height` parameter with `offset` for pagination does not strictly filter by that height; it returns actions from various heights, requiring client-side filtering.
-    *   Even a `limit=1` query with a `height` parameter (`/actions?height=H&limit=1`) seems unreliable for confirming that block `H` truly contains an action *from block H*. The API appears to sometimes return the closest available action from a *different, older* height if block `H` is empty or its actions are not primary in some internal Midgard index for that query. This makes it hard to reliably identify a `target_block_height` whose transactions can then be fetched.
-    *   Attempting a general scan (no `height` filter, using `offset` and `limit`) for `target_block_height = last_confirmed_height - 1` often fails because the newest actions returned by `/actions?offset=0` are already from blocks *older* than `last_confirmed_height - 1`. This causes the client-side scan (which stops if `action.height < target_block_height`) to terminate on the first page, finding no actions for the target.
-- **Pagination**: Ensuring all transactions for a target block are fetched, even if they span multiple API response pages. The Midgard API returns actions newest first, so to find an older target block, pagination must proceed until actions older than the target are encountered.
-- **Testing Environment Consistency**: Ensuring that file edits are immediately reflected when test scripts are run.
-- **Empty Data Handling**: Correctly creating output files (e.g., empty CSV with headers) when no relevant data is found for a query (e.g., no transactions in a specific block).
-- **Fetching 24-Hour Data**: Efficiently retrieving all actions from the Midgard API within the last 24 hours. This will likely involve:
-    *   Calculating a start timestamp (current time - 24 hours).
-    *   Paginating through the `/v2/actions` endpoint (newest first).
-    *   Client-side filtering of actions based on their `date` (timestamp) field to include only those within the 24-hour window.
-    *   Stopping pagination once actions older than the 24-hour window are encountered.
-- **Handling Large Data Volume**: The 24-hour window might contain a large number of actions, requiring efficient processing and memory management.
-- **Real-time Data Streaming**: Implementing a robust and efficient mechanism to continuously fetch new data (both confirmed and pending actions) from Midgard. This might involve careful management of polling intervals or exploring if Midgard offers any push/subscription mechanisms (unlikely for REST API). This will require threading for non-blocking polling.
-- **Pending Block Logic**: Defining the structure and update rules for a "pending block" composed of transactions that are not yet confirmed. This includes how to handle transactions that confirm or expire.
-- **Flask Application Development**: 
-    *   Designing appropriate API endpoints.
-    *   Managing application state if the Flask app needs to serve live, continuously updating data.
-    *   Implementing a user-friendly frontend that can display both historical and real-time data effectively.
-    *   Ensuring asynchronous operations if needed to prevent blocking while serving live updates.
-- **Comprehensive Testing**: Significantly refactoring `test_phase1_completion.py` to cover the 24-hour fetch, the new real-time streaming logic, pending block construction, and the Flask application's basic functionality. This will likely require advanced mocking for streaming behaviors.
-- **AI Data Preprocessing**:
-    *   **Feature Selection**: Identifying which data points from the fetched transactions (e.g., input/output assets, amounts, transaction types, fees, timestamps) are most relevant for predicting arbitrage. Integrating external price feeds might be necessary.
-    *   **`arb_ID` Definition**: Clarifying what constitutes an "arbitrage ID" in the context of Maya Protocol transactions. This might involve identifying specific patterns (e.g., cyclic trades) or focusing on individual swap profitability.
-    *   **Sequence Construction**: Defining an appropriate sequence length `M` for time-series analysis. Each sequence should represent a series of market events.
-    *   **Categorical Data Handling**: Effectively encoding categorical data like asset names (e.g., `BTC.BTC`, `ETH.ETH`) using techniques like one-hot encoding or learnable embeddings.
-    *   **Normalization**: Scaling numerical features to a consistent range (e.g., using `sklearn.preprocessing.MinMaxScaler` or `StandardScaler`).
-    *   **Data Structure for Model Input**: Ensuring the preprocessed data is in a format suitable for PyTorch models (e.g., tensors).
 
-## High-level Task Breakdown
-(Revised significantly to reflect new requirements)
+-   **Data Preprocessing Complexity:** Ensuring `src/preprocess_ai_data.py` correctly implements the new arbitrage logic and CoinGecko integration is crucial. The calculation of `target_mu_profit` needs careful verification.
+-   **CoinGecko API Usage:**
+    -   **Rate Limiting:** The free tier of CoinGecko API has rate limits (10-30 calls/minute). In-memory caching per run was implemented.
+    -   **File-based Caching:** Daily CoinGecko prices (asset, date -> price) are now cached to `data/processed_ai_data/coingecko_price_cache.json`. This significantly speeds up subsequent runs and reduces API calls for existing data. 
+        -   *Future Consideration:* When implementing higher-granularity (e.g., minute-by-minute) price fetching with a paid API, this file-based caching will be even more critical for managing API call volume and costs over time, ensuring that previously fetched granular prices are reused.
+    -   **Data Granularity & Potential Bias:** The free CoinGecko API (`get_coin_history_by_id`) provides daily historical prices. This is a known simplification. 
+        -   *Implication*: For transactions very close to the time of the daily CoinGecko price snapshot (especially the most recent transactions in a 24-hour data pull), the internal Maya price (`P_m`) and the external daily CoinGecko price (`P_u`) might appear more aligned simply due to less time for divergence. This could potentially lead the model to underestimate arbitrage opportunities for these recent transactions compared to if a more contemporaneous external price was available. This underscores the importance of future improvements with higher-granularity data.
+        -   *Future Improvement: With a paid CoinGecko subscription, investigate endpoints for more granular historical data.*
+    -   **Timestamp Conversion:** Maya Protocol timestamps (nanoseconds) are converted to seconds for CoinGecko.
+    -   **Asset Identifier Mapping:** Ensuring all relevant asset strings from Maya data (e.g., 'ETH.ETH', 'ETH/ETH', specific contract addresses for ERC20s) are correctly mapped to CoinGecko IDs in `MAYA_TO_COINGECKO_MAP` is vital for comprehensive price fetching. This has been significantly improved.
+-   **Model Adaptation:** The AI model (`src/model.py`) and training script (`src/train_model.py`) will need substantial updates.
 
-*   **Phase 1: Core Data Engine and Initial Display**
-    *   1.1. Setup Python Environment & Dependencies (Pandas, Requests, Flask) - **DONE** (Flask to be added if not present)
-    *   1.2. Fetch All Transactions from Blocks with Activity in the Last 24 Hours - **DONE**
-        *   1.2.1. Connect to Midgard API - **DONE**
-        *   1.2.2 (New Strategy): In `fetch_realtime_transactions.py`, implement logic to fetch actions page by page from the Midgard `/v2/actions` endpoint. - **DONE**
-        *   1.2.3 (New Strategy): Continue fetching pages as long as the timestamp of the actions (`date` field) is within the last 24 hours. Stop when actions older than 24 hours are encountered or no more actions are returned. - **DONE**
-        *   1.2.4 (New Strategy): Collect all actions that fall within the 24-hour window. - **DONE**
-        *   1.2.5 (New Strategy): Parse all collected actions using `parse_action`. - **DONE**
-        *   1.2.6 (New Strategy): Store all parsed transactions into a Pandas DataFrame. - **DONE**
-        *   1.2.7 (New Strategy): Save the DataFrame to `data/historical_24hr_maya_transactions.csv`. Handle empty results gracefully. - **DONE**
-    *   1.3. Real-time Transaction Streaming and Pending Block Construction - **DONE**
-        *   1.3.1. Design Data Structures: Define Python classes or dictionaries for representing confirmed actions/blocks and "pending blocks" (collections of pending transactions with relevant metadata). - **DONE** (Initial structures in `realtime_stream_manager.py` created, `common_utils.py` for parsing also created).
-        *   1.3.2. Confirmed Actions Stream: Implement a function/module (e.g., in a new `realtime_stream_manager.py` or extending `mempool_monitor.py`) to continuously poll Midgard for *newly confirmed* actions (actions with status 'success' or 'refund' that are more recent than the last seen confirmed action). - **DONE** (Implemented `poll_confirmed_actions` in `RealtimeStreamManager`).
-        *   1.3.3. Pending Actions Stream: Adapt/reuse `mempool_monitor.py` logic or integrate into `realtime_stream_manager.py` to continuously poll Midgard for *pending* actions. - **DONE** (Implemented `poll_pending_actions` and `_prune_stale_pending_actions` in `RealtimeStreamManager`).
-        *   1.3.4. Pending Block Management: Develop logic to:
-            *   Add new pending actions to the "pending block" data structure. - **DONE** (Covered by `poll_pending_actions`)
-            *   Remove actions from the "pending block" if they are later seen as confirmed (in 1.3.2 stream) or if they are assumed to have expired/failed (requires criteria, e.g., age). - **DONE** (Confirmed removal in `poll_confirmed_actions`, expiry in `_prune_stale_pending_actions`).
-        *   1.3.5. Data Aggregation: Maintain in-memory collections of recent confirmed actions and the current pending block, ready for access by the Flask app. - **DONE** (`RealtimeStreamManager` stores and provides getters).
-        *   1.3.6 Implement Threaded Polling: Enhance `RealtimeStreamManager` to use threads for continuous, non-blocking polling of confirmed and pending actions. - **DONE** (Implemented threaded polling in `RealtimeStreamManager`).
-    *   1.4. Flask Web Application for Data Display - **DONE**
-        *   1.4.1. Setup Basic Flask App: Create a new `app.py` with a basic Flask application. Install Flask dependency. - **DONE**
-        *   1.4.2. Data Access Layer: Implement functions within the Flask app or a helper module to access:
-            *   The 24-hour historical data (from the CSV file generated in 1.2.7). - **DONE**
-            *   The live stream of confirmed actions (from 1.3.5). - **DONE**
-            *   The current "pending block" data (from 1.3.5). - **DONE**
-        *   1.4.3. Flask Endpoints: Create API endpoints:
-            *   `/historical-24hr`: Returns the 24-hour transaction data (e.g., as JSON). - **DONE**
-            *   `/live-confirmed`: Returns recent confirmed transactions. - **DONE**
-            *   `/live-pending`: Returns the current pending block transactions. - **DONE**
-        *   1.4.4. Frontend Design (Simple): Create basic HTML templates (`templates` folder) and static files (`static` folder). - **DONE**
-            *   A page to display the 24-hour data (e.g., in a table). - **DONE** (`index.html` created)
-            *   A section/page to display live confirmed transactions. - **DONE** (placeholders in `index.html`)
-            *   A section/page to display pending transactions. - **DONE** (placeholders in `index.html`)
-        *   1.4.5. Frontend Data Fetching: Use JavaScript (e.g., `fetch` API with `setInterval` or a more robust solution like Server-Sent Events if time permits) to poll the Flask endpoints and update the display dynamically for live data. - **DONE**
-    *   1.5. Test Suite Enhancement
-        *   1.5.1. Test 24-Hour Fetch: Refactor/rewrite `test_task_1_2_realtime_data` in `test_phase1_completion.py` to validate the 24-hour data fetching (Task 1.2), checking for correct timestamp filtering, data integrity, and CSV output. - **DONE**
-        *   1.5.2. Test Real-time Streaming (Basic): Design and implement new tests for the core logic of fetching confirmed and pending actions (Task 1.3.2, 1.3.3). This might involve mocking `requests.get` to simulate API responses and checking if the streaming functions process them correctly. Testing continuous polling and pending block updates will be challenging and might be simplified initially.
-        *   1.5.3. Test Flask App (Basic): Add new tests (possibly in `test_app.py` or `test_phase1_completion.py`) to check if Flask endpoints (Task 1.4.3) are reachable and return expected data formats (e.g., JSON responses, correct status codes).
-    *   1.6. AI Data Preprocessing
-        *   1.6.1. Define Feature Set for AI Model: Identify relevant features from `historical_24hr_maya_transactions.csv` (e.g., `in_asset`, `in_amount`, `out_asset`, `out_amount`, `fees`, `type`, `date`). Consider if external price data is needed and how it would be integrated at this stage.
-        *   1.6.2. Implement Feature Engineering and Normalization:
-            *   Handle asset names (e.g., map to unique integer IDs, then plan for embeddings later in the model).
-            *   Convert timestamps to a numerical representation (e.g., seconds since epoch or time differences).
-            *   Normalize numerical features (amounts, engineered time features).
-            *   Create a preliminary definition of what an `arb_ID` or a sequence representing a potential arbitrage event might look like based on available transaction data.
-        *   1.6.3. Develop Sequence Generation Logic: Write functions to take the processed transaction data and create sequences of length `M` (e.g., `M=10` transactions). Each item in a sequence would be a vector of features from a single transaction.
-        *   1.6.4. Prepare Data for PyTorch Models: Ensure the output of sequence generation can be easily converted into PyTorch tensors (e.g., list of lists of floats, NumPy arrays).
-        *   1.6.5. Initial Data Preprocessing Script: Create a new script (e.g., `src/preprocess_ai_data.py`) that loads `data/historical_24hr_maya_transactions.csv`, applies the feature engineering, normalization, and sequence generation, and can save or return the processed data.
+## High-level Task Breakdown (Phase 2 - Model Development)
 
-*   **Phase 2: Arbitrage Identification** (Will use data from Phase 1)
-    *   (Sub-tasks remain largely the same as previously defined, but will operate on the new data sources)
-*   **Phase 3: Reporting and Simulation (Future Scope)**
-    *   (Sub-tasks remain as previously defined)
+1.  **Task 2.0: Refactor and Verify `src/preprocess_ai_data.py` (COMPLETED)**
+    *   **Description:** The `src/preprocess_ai_data.py` script was updated for the new arbitrage logic, CoinGecko integration, refined profit calculation, separate categorical/numerical outputs, and robust file-based caching.
+    *   **Key Outcomes:** Produces `sequences_and_targets.npz` with `X_cat_ids_sequences`, `X_num_sequences`, `y_p_targets`, `y_mu_targets`, and column name lists. Caching is verified.
+    *   **Deliverable:** Verified `src/preprocess_ai_data.py`.
 
+2.  **Task 2.1: Update `src/model.py` - Transformer Encoder (COMPLETED)**
+    *   **Description:** Verify and ensure the Transformer Encoder in `src/model.py` correctly accepts the separate categorical ID sequences (`X_cat_ids_sequences`) and numerical sequences (`X_num_sequences`) from the refactored preprocessing script. This includes ensuring embedding layers are appropriately defined and the model's `forward` pass correctly processes and combines these inputs.
+    *   **Key Outcomes:** 
+        *   Confirmed `model.py` structure (`self.categorical_feature_keys`, `self.embedders`, `forward` method) correctly handles the separate categorical ID and numerical inputs.
+        *   Order of categorical features in `model.py` matches `categorical_feature_columns` from `preprocess_ai_data.py`.
+        *   Updated the example `if __name__ == '__main__':` block in `model.py` to reflect the correct number of numerical features (8).
+    *   **Success Criteria:** Model structure is verified to be compatible with the new data format. Example usage updated.
+    *   **Deliverable:** Verified `src/model.py` for encoder input compatibility.
+
+3.  **Task 2.2: Update `src/model.py` - Prediction Heads (COMPLETED)**
+    *   **Description:** Verify the prediction heads in `src/model.py` are correctly defined for the two target variables.
+        *   `p_target` head: Predicts the next actor type (`ARB_SWAP`, `USER_SWAP`, `NON_SWAP`, `UNK_ACTOR`) - categorical output (4 classes).
+        *   `mu_target` head: Predicts a single float value for profit if the next transaction is an `ARB_SWAP`.
+    *   **Key Outcomes:**
+        *   Confirmed `p_head` in `model.py` outputs `p_target_classes` (e.g., 4) logits.
+        *   Confirmed `mu_head` in `model.py` outputs `mu_target_dim` (e.g., 1) value.
+        *   These align with `y_p_targets` and `y_mu_targets` from `preprocess_ai_data.py`.
+    *   **Success Criteria:** Model prediction heads are verified to match the shape and type of target variables.
+    *   **Deliverable:** Verified `src/model.py` for prediction head compatibility.
+
+4.  **Task 2.3 (REVISED): Update `src/train_model.py` (NEXT FOCUS)**
+    *   **Description:** Update the training script to:
+        *   Load the new data format from `sequences_and_targets.npz` (i.e., `X_cat_ids_sequences`, `X_num_sequences`, `y_p_targets`, `y_mu_targets`).
+        *   Determine vocabulary sizes for each categorical feature by loading the corresponding `*.json` mapping files (e.g., `asset_to_id.json`, `type_to_id.json`, `status_to_id.json`, `actor_type_to_id.json`) from `data/processed_ai_data/` and using `len(mapping)`.
+        *   Determine the number of numerical features from the shape of `X_num_sequences`.
+        *   Instantiate the revised model from `src/model.py` with these dynamically determined vocabulary sizes and number of numerical features.
+        *   Implement appropriate loss functions: `CrossEntropyLoss` for `p_target`, `MSELoss` for `mu_target` (masked to apply only when actual next is `ARB_SWAP`).
+    *   **Success Criteria:** Training loop runs without errors using the new data and model structure; loss values decrease over initial epochs.
+
+5.  **Task 2.4: Model Evaluation**
+    *   **Description:** Implement and run model evaluation metrics (e.g., accuracy/F1 for actor type, RMSE/MAE for profit prediction).
+    *   **Success Criteria:** Evaluation metrics are calculated and reported.
+
+6.  **Task 2.5 (Validation): Perform Full Pipeline Test with Fresh Data and Document**
+    *   **Description:** Execute the entire data pipeline (fetch, preprocess, train, evaluate) using newly fetched transaction data. This serves as a comprehensive test of the current system with fresh inputs and ensures reproducibility. Document this procedure in `README.md` for ongoing use. Maximize CoinGecko cache utilization.
+    *   **Sub-steps:**
+        1.  Fetch fresh 24hr transaction data using `src/fetch_realtime_transactions.py`.
+        2.  Preprocess the data using `src/preprocess_ai_data.py`, ensuring CoinGecko cache is utilized.
+        3.  Train the model using `src/train_model.py` on the newly preprocessed data.
+        4.  Evaluate the newly trained model using `src/evaluate_model.py`.
+        5.  Update `README.md` with instructions for this full test run.
+        6.  Update this scratchpad task status.
+    *   **Success Criteria:** All pipeline scripts execute successfully with fresh data. `README.md` is updated with clear instructions. Evaluation metrics from the fresh run are available.
+    *   **Deliverable:** Successful pipeline execution with fresh data, updated `README.md`, and updated scratchpad.
+    *   **Status:** SUPERSEDED by Task 2.6 due to miscommunication on testing methodology.
+
+7.  **Task 2.6: Implement Independent Train/Test Evaluation Workflow**
+    *   **Description:** Refactor the data fetching, preprocessing, training, and evaluation scripts to support a true train/test split for model evaluation. The model will be trained on one dataset and then evaluated on a separate, unseen dataset from an earlier time period.
+    *   **Data Definition:**
+        *   **Training/Validation Data:** Transactions from the most recent 24 hours.
+        *   **Test Data:** Transactions from the 24-hour period immediately preceding the training data (i.e., 48 hours ago to 24 hours ago).
+    *   **Key Script Modifications & Workflow:**
+        1.  **`src/fetch_realtime_transactions.py`:**
+            *   Add arguments: `--output-file` (e.g., `data/training_transactions.csv`, `data/test_transactions.csv`), `--hours-ago-start` (e.g., `24` for training, `48` for test), `--duration-hours` (e.g., `24`).
+            *   **Deliverable:** Script can fetch distinct datasets for training and testing. (COMPLETED)
+        2.  **`src/preprocess_ai_data.py`:**
+            *   Add arguments: `--mode` (`train` or `test`), `--input-csv`, `--output-npz` (e.g., `training_sequences.npz`, `test_sequences.npz`), `--artifacts-dir` (for scaler, mappings, model_config).
+            *   `train` mode: Learns and saves scaler, mappings, and model config (`model_config.json`). Saves to specified output NPZ.
+            *   `test` mode: Loads scaler, mappings. Applies them. Saves to specified output NPZ. Does *not* save model config.
+            *   **Deliverable:** Script can preprocess data in 'train' and 'test' modes, managing artifacts correctly. (COMPLETED)
+        3.  **`src/train_model.py`:**
+            *   Add arguments: `--input-npz` (for training sequences), `--model-config-path` (to load), `--model-save-dir`.
+            *   Uses loaded config to instantiate the model. Saves trained model weights to the specified directory.
+            *   **Deliverable:** Script trains model using specified sequences and pre-defined model configuration. (COMPLETED)
+        4.  **`src/evaluate_model.py`:**
+            *   Add arguments: `--input-npz` (for test sequences), `--model-config-path` (to load), `--model-weights-path`, `--output-dir` (for plots).
+            *   Uses loaded config and weights for evaluation on the specified test data. Saves plots to output directory.
+            *   **Deliverable:** Script evaluates a pre-trained model on specified test sequences using a pre-defined model configuration. (COMPLETED)
+    *   **Overall Success Criteria:**
+        *   All scripts are successfully refactored with new arguments and logic.
+        *   The new workflow (fetch train data, fetch test data, preprocess train, train model, preprocess test, evaluate on test) executes without errors.
+        *   Model evaluation metrics are generated based on an independent test set.
+        *   `README.md` is updated with clear instructions for the new train/test workflow.
+    *   **Deliverable:** Fully functional and documented independent train/test evaluation pipeline.
 
 ## Project Status Board
 
-**Current Overall Progress: Phase 1 - Core Data Engine and Initial Display, including AI Data Preprocessing, is COMPLETE. Ready to start Phase 2.**
-
-*   [x] **Phase 1: Core Data Engine and Initial Display**
-    *   [x] 1.1. Setup Python Environment & Dependencies (Pandas, Requests, Flask)
-    *   [x] 1.2. Fetch All Transactions from Blocks with Activity in the Last 24 Hours
-        *   [x] 1.2.1. Connect to Midgard API
-        *   [x] 1.2.2 (New Strategy): Implement paged fetching in `fetch_realtime_transactions.py`.
-        *   [x] 1.2.3 (New Strategy): Implement 24-hour timestamp filtering.
-        *   [x] 1.2.4 (New Strategy): Collect actions within 24-hour window.
-        *   [x] 1.2.5 (New Strategy): Parse collected actions.
-        *   [x] 1.2.6 (New Strategy): Store in DataFrame.
-        *   [x] 1.2.7 (New Strategy): Save to `data/historical_24hr_maya_transactions.csv`.
-    *   [x] 1.3. Real-time Transaction Streaming and Pending Block Construction
-        *   [x] 1.3.1. Design Data Structures for confirmed and pending blocks.
-        *   [x] 1.3.2. Implement stream for newly confirmed actions.
-        *   [x] 1.3.3. Implement stream for pending actions.
-        *   [x] 1.3.4. Develop pending block management logic.
-        *   [x] 1.3.5. Implement in-memory data aggregation for Flask.
-        *   [x] 1.3.6 Implement Threaded Polling in `RealtimeStreamManager`.
-    *   [x] 1.4. Flask Web Application for Data Display
-        *   [x] 1.4.1. Setup Basic Flask App (`app.py`, install Flask)
-        *   [x] 1.4.2. Implement Data Access Layer for Flask.
-        *   [x] 1.4.3. Create Flask API Endpoints.
-        *   [x] 1.4.4. Design Simple Frontend (HTML templates, static files).
-        *   [x] 1.4.5. Implement Frontend Data Fetching and Dynamic Updates.
-    *   [x] 1.5. Test Suite Enhancement
-        *   [x] 1.5.1. Refactor/Rewrite tests for 24-Hour Fetch logic.
-        *   [x] 1.5.2. Design and implement tests for Real-time Streaming logic.
-        *   [x] 1.5.3. Design and implement tests for Flask App endpoints.
-    *   [x] 1.6. AI Data Preprocessing
-        *   [x] 1.6.1. Define Feature Set for AI Model
-        *   [x] 1.6.2. Implement Feature Engineering and Normalization
-        *   [x] 1.6.3. Develop Sequence Generation Logic
-        *   [x] 1.6.4. Prepare Data for PyTorch Models
-        *   [x] 1.6.5. Initial Data Preprocessing Script
-*   [ ] **Phase 2: Arbitrage Identification** (All sub-tasks pending)
-*   [ ] **Phase 3: Reporting and Simulation** (All sub-tasks pending)
+-   [x] Phase 1: Data Fetching, Parsing, Storage, Initial UI, Initial AI Preprocessing (Uniswap)
+-   [x] Phase 2 - Task 2.0: Refactor and Verify `src/preprocess_ai_data.py` (CoinGecko, new profit, separate cat/num outputs, caching fixed)
+-   [x] Phase 2 - Task 2.1: Update `src/model.py` - Transformer Encoder (Verified, example updated)
+-   [x] Phase 2 - Task 2.2: Update `src/model.py` - Prediction Heads (Verified)
+-   [x] Phase 2 - Task 2.3: Update `src/train_model.py` (COMPLETED - Training loop runs, losses decrease, NaN issues resolved)
+-   [x] Phase 2 - Task 2.4: Model Evaluation (COMPLETED - Initial metrics and plots generated)
+-   [x] Phase 2 - Task 2.5 (Validation): Perform Full Pipeline Test with Fresh Data and Document (SUPERSEDED)
+-   [x] Phase 2 - Task 2.6: Implement Independent Train/Test Evaluation Workflow (COMPLETED)
+    -   [x] Sub-Task 2.6.1: Modify `src/fetch_realtime_transactions.py` (COMPLETED)
+    -   [x] Sub-Task 2.6.2: Modify `src/preprocess_ai_data.py` (COMPLETED)
+    -   [x] Sub-Task 2.6.3: Modify `src/train_model.py` (COMPLETED)
+    -   [x] Sub-Task 2.6.4: Modify `src/evaluate_model.py` (COMPLETED)
+    -   [x] Sub-Task 2.6.5: Execute full train/test workflow (COMPLETED)
+        -   [x] Fetch training data (most recent 24h, 1840 actions) to `data/training_transactions.csv` (COMPLETED)
+        -   [x] Fetch test data (48h ago to 24h ago, 1128 actions) to `data/test_transactions.csv` (COMPLETED)
+        -   [x] Preprocess training data (`data/training_transactions.csv` -> `data/processed_ai_data/training_sequences.npz`, artifacts to `data/processed_ai_data/`) (COMPLETED)
+        -   [x] Train model (using `data/processed_ai_data/training_sequences.npz` and `data/processed_ai_data/model_config.json`, models saved to `models/best_arbitrage_model.pth` and `models/final_arbitrage_model.pth`) (COMPLETED)
+        -   [x] Preprocess test data (`data/test_transactions.csv` -> `data/processed_ai_data/test_sequences.npz`, using existing artifacts, 1118 sequences generated) (COMPLETED)
+        -   [x] Evaluate model on test data (COMPLETED - See Executor's Feedback)
+    -   [x] Sub-Task 2.6.6: Update `README.md` with new workflow instructions (COMPLETED)
+-   [ ] **CURRENT FOCUS: Discuss evaluation results and decide next steps (Model Iteration or Phase 3)**
 
 ## Executor's Feedback or Assistance Requests
 
-Completed Task 1.2 (24-Hour Historical Data Fetch) and Task 1.5.1 (Update Test Suite for 24-Hour Fetch).
-- `src/fetch_realtime_transactions.py` modified for 24-hour data fetching.
-- `src/test_phase1_completion.py` updated to test the new 24-hour fetching logic.
+-   **Task 2.6 (Independent Train/Test) - Data Fetching:**
+    -   Successfully fetched training data (most recent 24h, 1840 actions) to `data/training_transactions.csv`.
+    -   Successfully fetched test data (48h-24h ago, 1128 actions) to `data/test_transactions.csv`.
 
-Completed Task 1.3.1 (Design Data Structures for Streaming):
-- Created `src/common_utils.py` with `parse_action` and `DF_COLUMNS`.
-- Updated `src/fetch_realtime_transactions.py` to use `common_utils.py`.
-- Created `src/realtime_stream_manager.py` with `RealtimeStreamManager` class structure and data stores.
+-   **Task 2.6 (Independent Train/Test) - Preprocess Training Data:**
+    -   Successfully preprocessed `data/training_transactions.csv` in `train` mode.
+    -   Artifacts created/updated in `data/processed_ai_data/`: `training_sequences.npz`, `scaler.pkl`, `model_config.json`, and mapping files.
+    -   1830 sequences generated.
 
-Completed Task 1.3.2 (Confirmed Actions Stream):
-- Implemented `poll_confirmed_actions` method in `RealtimeStreamManager`.
+-   **Task 2.6 (Independent Train/Test) - Train Model:**
+    -   Successfully trained model using `data/processed_ai_data/training_sequences.npz` and `data/processed_ai_data/model_config.json`.
+    -   Models saved to `models/best_arbitrage_model.pth` and `models/final_arbitrage_model.pth`.
 
-Completed Task 1.3.3 (Pending Actions Stream):
-- Implemented `poll_pending_actions` method in `RealtimeStreamManager`, including logic for pruning stale actions.
+-   **Task 2.6 (Independent Train/Test) - Preprocess Test Data:**
+    -   Successfully preprocessed `data/test_transactions.csv` in `test` mode.
+    -   Used existing artifacts (scaler, mappings) from `data/processed_ai_data/`.
+    -   Output saved to `data/processed_ai_data/test_sequences.npz`.
+    -   1118 sequences generated.
+    -   CoinGecko cache was utilized and updated (14 new API calls).
 
-Tasks 1.3.4 (Pending Block Management) and 1.3.5 (Data Aggregation) are considered complete as their core logic is integrated into the `RealtimeStreamManager` and its polling methods.
+-   **Task 2.5 (Validation) - Sub-step 1 (Fetch Data):** Successfully fetched 1929 actions from the last 24 hours. Data saved to `data/historical_24hr_maya_transactions.csv`.
 
-Completed Task 1.3.6 (Implement Threaded Polling):
-- Implemented threaded, continuous polling in `RealtimeStreamManager` using `start_streaming` and `stop_streaming` methods.
+-   **Task 2.5 (Validation) - Sub-step 2 (Preprocess Data):** Successfully preprocessed the fresh data. `sequences_and_targets.npz` and other related files in `data/processed_ai_data/` have been updated. The CoinGecko cache was read (22 items) and updated (25 items), indicating new prices were fetched and cached as expected.
 
-Task 1.3 is now complete.
+-   **Task 2.5 (Validation) - Sub-step 3 (Train Model):** Successfully trained the model using the newly preprocessed data. The training ran for 50 epochs. `models/best_arbitrage_model.pth` and `models/final_arbitrage_model.pth` have been updated.
 
-Verified Task 1.4.1 (Basic Flask App Setup) is complete.
+-   **Task 2.5 (Validation) - Sub-step 4 (Evaluate Model):** Successfully evaluated the newly trained `best_arbitrage_model.pth`. Metrics and plots (`models/confusion_matrix_actor_type.png`, `models/scatter_plot_mu_profit.png`) have been updated. See new metrics below.
 
-Completed Task 1.4.2 (Data Access Layer):
-- Integrated `RealtimeStreamManager` into `src/app.py`.
-- Added `get_historical_transactions()` function to load CSV data.
-- Implemented `atexit` handler for graceful shutdown of the stream manager.
+-   **Task 2.5 (Validation) - Sub-step 5 (Update README):** `README.md` has been updated with instructions for performing an end-to-end test with fresh data.
 
-Completed Task 1.4.3 (Flask Endpoints):
-- Added `/api/historical-24hr`, `/api/live-confirmed`, and `/api/live-pending` endpoints to `src/app.py`.
+-   **Task 2.5 (Validation) - COMPLETED:** The full pipeline test with fresh data is complete, and documentation has been updated.
 
-Completed Task 1.4.4 (Frontend Design):
-- Created `src/templates/index.html` with basic structure.
-- Created `src/static/style.css` for styling.
-- Created placeholder `src/static/script.js`.
-- Updated `src/app.py` to serve `index.html`.
+-   **Model Evaluation (Task 2.4) Complete.** Key results from `src/evaluate_model.py` on the validation set:
+    -   **Actor Type Prediction:**
+        -   Overall Accuracy: 90.31%
+        -   `ARB_SWAP`: Precision=0.9058, Recall=0.9909, F1=0.9465 (Very good at finding ARB_SWAPs)
+        -   `USER_SWAP`: All metrics 0.0 (Likely no USER_SWAPs in validation set or all misclassified)
+        -   `NON_SWAP`: Precision=0.8571, Recall=0.3462, F1=0.4932 (Low recall, many NON_SWAPs misclassified as ARB_SWAP)
+        -   `UNK_ACTOR`: All metrics 0.0
+        -   Confusion Matrix saved to `models/confusion_matrix_actor_type.png`.
+    -   **Profit (Mu) Prediction (for true ARB_SWAPs with non-NaN targets, N=318):**
+        -   MSE: 134.5363
+        -   RMSE: 11.5990
+        -   MAE: 9.2995
+        -   Scatter plot saved to `models/scatter_plot_mu_profit.png`.
 
-Completed Task 1.4.5 (Frontend Data Fetching):
-- Implemented JavaScript in `src/static/script.js` to fetch and display data from API endpoints, including periodic updates for live data.
+-   **NEW Model Evaluation Results (Task 2.5 - Fresh Data Run):**
+    -   **Actor Type Prediction:**
+        -   Overall Accuracy: 91.38%
+        -   `ARB_SWAP`: Precision=0.9122, Recall=1.0000, F1=0.9541
+        -   `USER_SWAP`: All metrics 0.0
+        -   `NON_SWAP`: Precision=1.0000, Recall=0.1750, F1=0.2979 (Low recall persists)
+        -   `UNK_ACTOR`: All metrics 0.0
+        -   Confusion Matrix updated: `models/confusion_matrix_actor_type.png`.
+    -   **Profit (Mu) Prediction (for true ARB_SWAPs with non-NaN targets, N=328):**
+        -   MSE: 125.3422
+        -   RMSE: 11.1956
+        -   MAE: 9.2270
+        -   Scatter plot updated: `models/scatter_plot_mu_profit.png`.
 
-Task 1.4 is now complete.
-Proceeding to Task 1.5.2: Test Real-time Streaming logic.
-
-Completed Task 1.5.2: Test Real-time Streaming logic.
-- Enhanced `test_task_1_3_realtime_stream_manager` in `src/test_phase1_completion.py` with more detailed scenarios for `RealtimeStreamManager`'s polling methods (confirmed and pending actions), including edge cases and error handling.
-- Improved threading tests to verify that polling methods are actively called.
-
-Completed Task 1.5.3: Test Flask App endpoints.
-- Added `test_task_1_5_3_flask_app_endpoints` to `src/test_phase1_completion.py`.
-- This test uses a Flask test client and mocking to verify the behavior of all API endpoints (`/`, `/api/historical-24hr`, `/api/live-confirmed`, `/api/live-pending`), checking status codes, content types, and data integrity.
-
-All tasks for Phase 1 are now complete.
-
-The Flask application is now working correctly after addressing some client-side JavaScript issues related to URL construction and DOM manipulation when handling empty API responses. The application successfully loads historical data and displays live confirmed and pending transactions.
-
-Ready to proceed to Phase 2: Arbitrage Identification.
-**Planner Update:** Phase 1 is being extended to include AI Data Preprocessing tasks.
-
-**Executor Update (Task 1.6 - AI Data Preprocessing):**
-Completed all sub-tasks for Task 1.6:
-- **1.6.1 (Define Feature Set):** Identified key features from `historical_24hr_maya_transactions.csv` for the initial model: `date`, `status`, `type`, `pools`, `in_asset`, `in_amount`, `out_asset`, `out_amount`, `swap_liquidity_fee`, `swap_slip_bps`, `swap_network_fee_asset`, `swap_network_fee_amount`, `transaction_id`.
-- **1.6.2 (Feature Engineering & Normalization):** Implemented in `src/preprocess_ai_data.py`.
-    - Loaded data, converted amounts/dates to numeric.
-    - Created mappings for categorical features (assets, types, status) to integer IDs, saved to JSON files in `data/processed_ai_data/` (e.g., `asset_to_id.json`). Handled `PAD` and `UNK` tokens.
-    - Engineered time features: `timestamp_norm` (from epoch seconds) and `time_delta_norm` (difference from previous transaction).
-    - Applied `MinMaxScaler` to numerical features (`_norm` suffixed columns), scaler saved to `data/processed_ai_data/scaler.pkl`.
-- **1.6.3 (Sequence Generation Logic):** Implemented `generate_sequences` function in `src/preprocess_ai_data.py`.
-    - Creates sequences of length `M=10`.
-    - Handles padding for sequences at the beginning of the dataset.
-    - Returns a 3D NumPy array and corresponding transaction IDs.
-- **1.6.4 (Prepare for PyTorch):** The output NumPy array from sequence generation is directly usable for PyTorch models.
-- **1.6.5 (Initial Data Preprocessing Script):** `src/preprocess_ai_data.py` is now a runnable script that performs all preprocessing steps: loads raw data, engineers features, generates sequences, and saves the processed sequences (`sequences.npy`), transaction IDs (`sequence_transaction_ids.json`), mappings, and the scaler to the `data/processed_ai_data/` directory.
-
-Next step would be to run `src/preprocess_ai_data.py` to generate the processed data files, then move to Phase 2. The script also needs testing.
-**Executor Update:** Successfully ran `src/preprocess_ai_data.py`. All processed data files (sequences, mappings, scaler) have been generated in `data/processed_ai_data/`. Phase 1 is now complete.
+-   **Next Steps & Considerations:**
+    -   Review generated plots (`confusion_matrix_actor_type.png`, `scatter_plot_mu_profit.png`).
+    -   Check class distribution of `actor_label` in `data/processed_ai_data/intermediate_processed_data.csv` to understand `USER_SWAP` prevalence.
+    -   Discuss strategies for improving `NON_SWAP` recall and overall model performance if desired before moving to Phase 3.
 
 ## Lessons
 
-*   Midgard API `/v2/actions` endpoint is paginated with a default/max limit of 50 actions per call. Use `limit` and `offset` parameters for pagination.
-*   Midgard API `/v2/health` endpoint provides `lastAggregated.height` which can be used as the latest confirmed block height.
-*   Actions fetched from `/v2/actions` are generally sorted by height (descending) and then by date/time within the block.
-*   When targeting transactions from a *specific older* block height using pagination (newest first API results), it's crucial to continue fetching pages as long as the actions are newer than or contemporaneous with the target block. Stop pagination once actions *older* than the target block height are encountered.
-*   Verify exact string matches (including trailing spaces or additional words like "API") when writing checks in test scripts that parse stdout.
-*   Pandas `df.to_csv()` on an empty DataFrame creates a file with only the header row (assuming `index=False` and `header=True`). It's good practice to explicitly define columns for the DataFrame to ensure consistent CSV headers, especially if the DataFrame might be empty.
-*   **Testing Environment**: Discrepancies between local file state and the state used by automated test runners can lead to confusing test failures (e.g., debug prints not appearing, file creation behaving unexpectedly). Ensure the environment is using the latest code for tests.
-*   When installing Python on macOS, ensure Homebrew is installed first (`/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`), then install Python (`brew install python`).
-*   Install Python packages using `python3 -m pip install <package_name>`. Be mindful of which `python3` is being used if multiple versions are present. The desired Python (e.g., from Homebrew) should be prioritized in the system PATH or called explicitly (e.g. `/opt/homebrew/bin/python3 -m pip install ...`).
-*   PyTorch installation via pip: `pip install torch torchvision torchaudio`.
-*   The correct Maya Protocol API endpoint for pools is `https://mayanode.mayachain.info/mayachain/pools`. The initially provided `api.mayaprotocol.com` was incorrect or not resolvable.
-*   When generating mock data with pandas, ensure `os.makedirs(exist_ok=True)` or an explicit check `if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)` is used to create output directories to prevent errors if the script is run multiple times or the directory doesn't exist.
-*   For long-running simulation scripts (like a mempool monitor), include a `try...except KeyboardInterrupt` block to handle graceful shutdown when the user presses Ctrl+C.
-*   When preprocessing data for sequences: clearly define features to include. Convert timestamps to numerical representations (e.g., Unix epoch seconds) before scaling. Map categorical string features to numerical indices. For unique IDs like `arb_ID`, they are generally not embedded directly for generalization; instead, use them as identifiers or extract structured features if available. Use `torch.tensor()` to convert NumPy arrays to PyTorch tensors.
-*   **Maya Protocol Midgard API:** The correct public Midgard API endpoint for Maya Protocol is `https://midgard.mayachain.info/v2`. Using a generic or THORChain-specific Midgard endpoint (like one from `ninerealms.com`) will not work for Maya Protocol specific data.
-*   For managing Python dependencies and avoiding conflicts with system Python (especially on macOS with Homebrew), use virtual environments:
-  - Create: `python3 -m venv .venv`
-  - Install packages: `.venv/bin/python -m pip install <package_name>`
-  - Run scripts: `.venv/bin/python your_script.py`
-*   Ensure scripts are run with `python3` (or the specific venv python like `.venv/bin/python`) if `python` is not aliased or available. If `ModuleNotFound` errors occur, ensure all dependencies (e.g., `pandas`, `requests`, `scikit-learn`, `torch`) are installed into the active virtual environment.
-*   **Output Buffering with subprocess:** When a Python script run via `subprocess.run` appears to produce no `stdout` or `stderr` despite working correctly when run directly, it might be due to output buffering. Add `flush=True` to `print()` statements in the child script to ensure output is written immediately and captured by the parent process, especially if the child script is terminated by a timeout.
-*   **Midgard API `/v2/actions` Filtering:** When using the Maya Midgard API (`https://midgard.mayachain.info/v2`), attempting to filter `/v2/actions` with both `status=pending` and `type=swap` server-side *may* lead to issues (like the 400 error seen with a different endpoint, or computationally expensive results). It's safer and verified to fetch by `type=swap` and then filter for `action.get('status') == 'pending'` on the client side.
+-   When calculating profit metrics involving ratios or inverse prices (like `1/P_m`), be highly aware of potential numerical instability and division by small numbers leading to extreme outliers. 
+-   Simple percentile clipping might not be enough if the underlying distribution is extremely skewed; the percentiles themselves can be outliers.
+-   Log-transforming ratios (`log(A/B)`) can be an effective way to stabilize variance, make the distribution more symmetric, and handle scale issues for target variables in regression tasks, especially when A and B are prices or quantities.
 
-## User Specified Information
+## Future Enhancements (User Requested)
 
-<user_provided_data>
-- Include info useful for debugging in the program output.
-- Read the file before you try to edit it.
-- If there are vulnerabilities that appear in the terminal, run npm audit before proceeding
-- Always ask before using the -force git command
-</user_provided_data> 
+-   **Expand Historical Data Fetching:** Increase the historical data collection period from the current 24 hours to approximately 100 days (~2400 hours). This will require:
+    -   Modifying `src/fetch_realtime_transactions.py` to handle requests for extended time ranges.
+    -   Implementing logic to handle API pagination if Midgard returns large datasets in chunks.
+    -   Consideration for increased data storage and processing times for both data fetching and subsequent model training.
+
+## Lessons
+
+-   **Arbitrage Definition:** `
+
+-   **Task 2.6 (Independent Train/Test) - Evaluate Model on Test Data:**
+    -   Model `models/best_arbitrage_model.pth` evaluated on `data/processed_ai_data/test_sequences.npz`.
+    -   **Actor Type Prediction:**
+        -   Overall Accuracy: 83.09%
+        -   `ARB_SWAP`: Precision=0.8309, Recall=1.0000, F1=0.9077
+        -   `NON_SWAP`: Precision=0.0000, Recall=0.0000, F1=0.0000 (All 189 NON_SWAP in test set misclassified as ARB_SWAP)
+        -   Confusion Matrix saved to `models/confusion_matrix_actor_type.png`.
+    -   **Profit (Mu) Prediction (for 287 true ARB_SWAPs with non-NaN targets):**
+        -   MSE: 118.7236
+        -   RMSE: 10.8960
+        -   MAE: 9.3089
+        -   Scatter plot saved to `models/scatter_plot_mu_profit.png`.
+    -   *Key Issue: Model struggles significantly with NON_SWAP classification, labeling them as ARB_SWAP.*

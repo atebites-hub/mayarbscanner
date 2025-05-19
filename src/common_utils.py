@@ -6,7 +6,8 @@ DF_COLUMNS = [
     "first_in_tx_id", "first_out_tx_id", "in_asset", "in_amount", "in_address",
     "out_asset", "out_amount", "out_address", "swap_liquidity_fee", 
     "swap_slip_bps", "swap_target_asset", "swap_network_fee_asset", 
-    "swap_network_fee_amount", "transaction_id"
+    "swap_network_fee_amount", "transaction_id",
+    "memo_str", "affiliate_id"
 ]
 
 def parse_action(action: dict) -> dict:
@@ -32,7 +33,9 @@ def parse_action(action: dict) -> dict:
         "swap_target_asset": None,
         "swap_network_fee_asset": None,
         "swap_network_fee_amount": None,
-        "transaction_id": None 
+        "transaction_id": None,
+        "memo_str": None,
+        "affiliate_id": None
     }
 
     in_tx = action.get("in", [])
@@ -43,6 +46,27 @@ def parse_action(action: dict) -> dict:
             parsed["in_asset"] = first_in_coin.get("asset")
             parsed["in_amount"] = first_in_coin.get("amount")
         parsed["in_address"] = in_tx[0].get("address")
+        parsed["memo_str"] = in_tx[0].get("memo")
+
+        if parsed["memo_str"] and parsed["type"] == "swap":
+            memo_parts = parsed["memo_str"].split(':')
+            if memo_parts[0].upper() in ["SWAP", "S", "="] :
+                affiliate_candidate = None
+                if len(memo_parts) > 4 and memo_parts[4]:
+                    affiliate_candidate = memo_parts[4]
+                elif len(memo_parts) > 3 and not memo_parts[3] and len(memo_parts) > 4 and memo_parts[4]:
+                    pass
+                elif len(memo_parts) > 3 and memo_parts[3] and (memo_parts[3].startswith("maya1") or memo_parts[3].startswith("thor1") or memo_parts[3].startswith("tthor1") or len(memo_parts[3]) <= 20) :
+                    if len(memo_parts) == 4:
+                        affiliate_candidate = memo_parts[3]
+                    elif len(memo_parts) > 4 and memo_parts[4]: 
+                        if memo_parts[4]:
+                            affiliate_candidate = memo_parts[4]
+                        elif memo_parts[3]:
+                            affiliate_candidate = memo_parts[3]
+
+                if affiliate_candidate:
+                    parsed["affiliate_id"] = affiliate_candidate.split('/')[0]
 
     out_tx = action.get("out", [])
     if out_tx: # 'out' can be empty for some action types or states
