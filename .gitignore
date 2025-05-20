@@ -174,4 +174,8 @@ cython_debug/
 .pypirc
 
 # logs
-data
+data/
+!data/test_data.json
+!data/transactions_data.json
+evaluation_results_generative/
+models/
