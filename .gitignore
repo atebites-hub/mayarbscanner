@@ -179,3 +179,5 @@ data/
 !data/transactions_data.json
 evaluation_results_generative/
 models/
+.DS_Store
+src/.DS_Store
