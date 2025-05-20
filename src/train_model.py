@@ -8,329 +8,334 @@ import json # For loading mapping files
 import pandas as pd
 import argparse # Added
 
-from model import ArbitragePredictionModel
+from model import GenerativeTransactionModel
 
-# --- Default Configuration (can be overridden by args or model_config.json) ---
+# --- Default Configuration (GENERATIVE MODEL - can be overridden by args) ---
 DEFAULT_MODEL_SAVE_DIR = "models"
-DEFAULT_BEST_MODEL_SAVE_PATH = os.path.join(DEFAULT_MODEL_SAVE_DIR, "best_arbitrage_model.pth")
-DEFAULT_FINAL_MODEL_SAVE_PATH = os.path.join(DEFAULT_MODEL_SAVE_DIR, "final_arbitrage_model.pth")
+DEFAULT_GENERATIVE_MODEL_CONFIG_FILENAME = "model_config_generative_thorchain.json" # From preprocess
+DEFAULT_INPUT_NPZ_GENERATIVE = "sequences_and_targets_generative_thorchain.npz" # From preprocess
+
+DEFAULT_BEST_MODEL_GENERATIVE_SAVE_PATH = os.path.join(DEFAULT_MODEL_SAVE_DIR, "best_generative_model_thorchain.pth")
+DEFAULT_FINAL_MODEL_GENERATIVE_SAVE_PATH = os.path.join(DEFAULT_MODEL_SAVE_DIR, "final_generative_model_thorchain.pth")
 
 # Hyperparameters (some might be moved to model_config or become args)
-BATCH_SIZE = 32
-LEARNING_RATE = 1e-4 # 0.0001
+BATCH_SIZE = 16 # Adjusted, generative model might be larger
+LEARNING_RATE = 5e-5 # Adjusted
 NUM_EPOCHS = 50 
-VAL_SPLIT = 0.2
-LAMBDA_MU = 1.0 # Weight for mu_loss in total_loss
+VAL_SPLIT = 0.15 # Adjusted
 
-# Embedding dimensions (will be loaded from model_config or set if not present)
-# These are default if not in config, though model_config should ideally provide them
-DEFAULT_ASSET_EMBED_DIM = 32
-DEFAULT_TYPE_EMBED_DIM = 10 # Reduced from 16
-DEFAULT_STATUS_EMBED_DIM = 8  # Reduced from 16
-DEFAULT_ACTOR_TYPE_EMBED_DIM = 10 # For actor_type_id in sequence
+# Embedding dimensions - these will be passed to the model
+# The model itself will use its model_config to know which features get which embeddings
+DEFAULT_EMBEDDING_DIM_CONFIG = {
+    "default_cat_embed_dim": 32,  # Default for general categoricals not specified below
+    "address_hash_embed_dim": 64, # For hashed addresses
+    "asset_embed_dim": 48,        # For asset IDs (e.g., pool1_asset_id, in_coin1_asset_id)
+    "action_type_embed_dim": 16,  # For action_type_id
+    "action_status_embed_dim": 16 # For action_status_id
+    # Add other specific feature_key prefixes if they need unique embedding dims
+}
 
-# Transformer Model parameters (will be loaded from model_config or set if not present)
-DEFAULT_D_MODEL = 128 # Smaller model for faster iteration
-DEFAULT_NHEAD = 4
-DEFAULT_NUM_ENCODER_LAYERS = 3
-DEFAULT_DIM_FEEDFORWARD = 512
+# Transformer Model parameters (can also be part of a more detailed model architecture config if needed)
+DEFAULT_D_MODEL = 256
+DEFAULT_NHEAD = 8
+DEFAULT_NUM_ENCODER_LAYERS = 4
+DEFAULT_DIM_FEEDFORWARD = 1024 # Typically 2x to 4x d_model
 DEFAULT_DROPOUT = 0.1
 
-# --- Dataset Class (Modified for separate cat and num features) ---
-class TransactionSequenceDataset(Dataset):
-    def __init__(self, X_cat_ids, X_num, y_p, y_mu):
-        self.X_cat_ids = torch.tensor(X_cat_ids, dtype=torch.long) # Categorical IDs should be long
-        self.X_num = torch.tensor(X_num, dtype=torch.float32)
-        self.y_p = torch.tensor(y_p, dtype=torch.float32) # One-hot, for CrossEntropy convert to indices later
-        self.y_mu = torch.tensor(y_mu, dtype=torch.float32) # Float, potentially NaN
+# --- Dataset Class (for Generative Model) ---
+class GenerativeTransactionDataset(Dataset):
+    def __init__(self, X_sequences, Y_targets):
+        # X_sequences: (num_samples, seq_len, num_features_total)
+        # Y_targets:   (num_samples, num_features_total)
+        self.X_sequences = torch.tensor(X_sequences, dtype=torch.float32) # Model will handle casting to long for relevant parts
+        self.Y_targets = torch.tensor(Y_targets, dtype=torch.float32)
 
     def __len__(self):
-        return len(self.X_cat_ids) # length based on first dimension of X_cat_ids
+        return len(self.X_sequences)
 
     def __getitem__(self, idx):
-        return self.X_cat_ids[idx], self.X_num[idx], self.y_p[idx], self.y_mu[idx]
+        return self.X_sequences[idx], self.Y_targets[idx]
 
-# --- Helper function to load vocab sizes ---
-def load_vocab_size(mapping_file_path):
-    try:
-        with open(mapping_file_path, 'r') as f:
-            mapping = json.load(f)
-            return len(mapping)
-    except FileNotFoundError:
-        print(f"Error: Mapping file not found at {mapping_file_path}")
-        raise
-    except json.JSONDecodeError:
-        print(f"Error: Could not decode JSON from {mapping_file_path}")
-        raise
+# --- Composite Loss Function for Generative Model ---
+def calculate_composite_loss(predictions, targets, feature_output_info_list, device):
+    """
+    Calculates a composite loss for the generative model.
+    - CrossEntropyLoss for ID-mapped and Hashed categorical features.
+    - BCEWithLogitsLoss for binary flag features.
+    - MSELoss for scaled numerical features.
+
+    Args:
+        predictions (torch.Tensor): Model output (batch_size, total_output_dimension from model).
+        targets (torch.Tensor): Ground truth labels (batch_size, num_input_features_ordered).
+        feature_output_info_list (list): List of dictionaries from model.feature_output_info,
+                                         detailing each feature's output slice and type.
+        device (torch.device): Current device.
+
+    Returns:
+        torch.Tensor: The total combined loss.
+        dict: Dictionary containing individual loss components (e.g., cat_loss, num_loss, flag_loss).
+    """
+    total_loss = torch.tensor(0.0, device=device)
+    loss_components = {
+        'categorical_loss': torch.tensor(0.0, device=device),
+        'numerical_loss': torch.tensor(0.0, device=device),
+        'flag_loss': torch.tensor(0.0, device=device)
+    }
+    num_cat_feats, num_num_feats, num_flag_feats = 0, 0, 0
+
+    ce_loss_fn = nn.CrossEntropyLoss()
+    bce_loss_fn = nn.BCEWithLogitsLoss()
+    mse_loss_fn = nn.MSELoss()
+
+    for feat_info in feature_output_info_list:
+        pred_slice = predictions[:, feat_info['output_start_idx']:feat_info['output_end_idx']]
+        # Targets are indexed by their original input order
+        target_slice = targets[:, feat_info['original_input_index']]
+        feat_type = feat_info['type']
+        loss = torch.tensor(0.0, device=device)
+
+        if feat_type == 'id_cat' or feat_type == 'hash_cat':
+            # pred_slice is (batch_size, vocab_size_for_this_feature)
+            # target_slice is (batch_size,) and needs to be long type for CE
+            loss = ce_loss_fn(pred_slice, target_slice.long())
+            loss_components['categorical_loss'] += loss.item() # Store item for aggregation
+            num_cat_feats += 1
+        
+        elif feat_type == 'binary':
+            # pred_slice is (batch_size, 1) for binary logits
+            # target_slice is (batch_size,)
+            loss = bce_loss_fn(pred_slice.squeeze(-1), target_slice.float())
+            loss_components['flag_loss'] += loss.item()
+            num_flag_feats += 1
+        
+        elif feat_type == 'numerical':
+            # pred_slice is (batch_size, 1) for numerical predictions
+            # target_slice is (batch_size,)
+            loss = mse_loss_fn(pred_slice.squeeze(-1), target_slice.float())
+            loss_components['numerical_loss'] += loss.item()
+            num_num_feats += 1
+        
+        total_loss += loss # Accumulate actual loss tensor for backward pass
+    
+    # Average the component losses for logging if features of that type existed
+    # Note: loss_components store sum of .item(), so divide by count for average
+    if num_cat_feats > 0: loss_components['categorical_loss'] /= num_cat_feats
+    if num_num_feats > 0: loss_components['numerical_loss'] /= num_num_feats
+    if num_flag_feats > 0: loss_components['flag_loss'] /= num_flag_feats
+
+    # Optionally average total_loss if desired, or sum is fine for backward.
+    # If averaging total loss, divide by the total number of features considered in the loss:
+    num_total_loss_terms = num_cat_feats + num_num_feats + num_flag_feats
+    if num_total_loss_terms > 0:
+        total_loss /= num_total_loss_terms
+    
+    return total_loss, loss_components
 
 # --- Main Training Script ---
 def main(args):
     os.makedirs(args.model_save_dir, exist_ok=True)
 
-    # --- 1. Load Model Configuration ---
-    print(f"Loading model configuration from {args.model_config_path}...")
+    # --- 1. Load Model Configuration from Preprocessing ---
+    # The model_config_path will point to e.g. data/processed_ai_data_generative_test/thorchain_artifacts_v1/model_config_generative_thorchain.json
+    print(f"Loading generative model configuration from {args.generative_model_config_path}...")
     try:
-        with open(args.model_config_path, 'r') as f_config:
-            model_config = json.load(f_config)
+        with open(args.generative_model_config_path, 'r') as f_config:
+            model_config_from_preprocessor = json.load(f_config)
     except FileNotFoundError:
-        print(f"Error: Model configuration file not found at {args.model_config_path}.")
+        print(f"Error: Generative model configuration file not found at {args.generative_model_config_path}.")
         return
     except json.JSONDecodeError:
-        print(f"Error: Could not decode JSON from {args.model_config_path}.")
+        print(f"Error: Could not decode JSON from {args.generative_model_config_path}.")
         return
 
-    # Extract parameters from model_config, using defaults if not present
-    # Vocab sizes MUST be in model_config
-    categorical_embedding_details = model_config.get('categorical_embedding_details')
-    if not categorical_embedding_details:
-        print("Error: 'categorical_embedding_details' not found in model_config.json")
-        return
-        
-    # Example: preprocessor might save mapping file names as keys
-    asset_vocab_size = categorical_embedding_details.get("asset_to_id.json") 
-    type_vocab_size = categorical_embedding_details.get("type_to_id.json")
-    status_vocab_size = categorical_embedding_details.get("status_to_id.json")
-    actor_type_vocab_size = categorical_embedding_details.get("actor_type_to_id.json")
+    # Extract necessary info from model_config_from_preprocessor
+    # sequence_length = model_config_from_preprocessor.get('sequence_length') # Model takes this from its own config
+    # num_features_total = model_config_from_preprocessor.get('num_features_total') # Model takes this
 
-    if any(v is None for v in [asset_vocab_size, type_vocab_size, status_vocab_size, actor_type_vocab_size]):
-        print(f"Error: One or more vocab sizes (asset, type, status, actor_type) not found in model_config.json under 'categorical_embedding_details'. Found: {categorical_embedding_details}")
-        return
-        
-    num_numerical_features = model_config.get('num_numerical_features')
-    if num_numerical_features is None:
-        print("Error: 'num_numerical_features' not found in model_config.json")
-        return
-    
-    sequence_length = model_config.get('sequence_length')
-    if sequence_length is None:
-        print("Error: 'sequence_length' not found in model_config.json")
-        return
-
-    p_target_classes = model_config.get('p_target_classes', actor_type_vocab_size) # Default to actor_type_vocab_size if not specified
-
-    # Embedding dimensions and Transformer params (use defaults if not in config)
-    asset_embed_dim = model_config.get('asset_embed_dim', DEFAULT_ASSET_EMBED_DIM)
-    type_embed_dim = model_config.get('type_embed_dim', DEFAULT_TYPE_EMBED_DIM)
-    status_embed_dim = model_config.get('status_embed_dim', DEFAULT_STATUS_EMBED_DIM)
-    actor_type_embed_dim = model_config.get('actor_type_embed_dim', DEFAULT_ACTOR_TYPE_EMBED_DIM)
-    d_model = model_config.get('d_model', DEFAULT_D_MODEL)
-    nhead = model_config.get('nhead', DEFAULT_NHEAD)
-    num_encoder_layers = model_config.get('num_encoder_layers', DEFAULT_NUM_ENCODER_LAYERS)
-    dim_feedforward = model_config.get('dim_feedforward', DEFAULT_DIM_FEEDFORWARD)
-    dropout_rate = model_config.get('dropout', DEFAULT_DROPOUT)
-    
-    print(f"Model config loaded. Asset Vocab: {asset_vocab_size}, Type Vocab: {type_vocab_size}, Status Vocab: {status_vocab_size}, ActorType Vocab: {actor_type_vocab_size}")
-    print(f"Num Numerical Feats: {num_numerical_features}, Seq Len: {sequence_length}, P-Target Classes: {p_target_classes}")
-
-    # --- 2. Load Training Data ---
-    print(f"Loading training data from {args.input_npz}...")
+    # --- 2. Load Training Data (Generative Format) ---
+    # The input_npz_generative path will point to e.g. data/processed_ai_data_generative_test/sequences_and_targets_generative_thorchain.npz
+    print(f"Loading generative training data from {args.input_npz_generative}...")
     try:
-        data = np.load(args.input_npz, allow_pickle=True)
-        X_cat_ids_sequences = data['X_cat_ids_sequences']
-        X_num_sequences = data['X_num_sequences']
-        y_p_targets = data['y_p_targets']
-        y_mu_targets = data['y_mu_targets']
+        data = np.load(args.input_npz_generative, allow_pickle=True)
+        X_sequences = data['X_sequences']
+        Y_targets = data['Y_targets']
+        # feature_columns_ordered_from_data = data['feature_columns_ordered'] # For validation against model_config
     except FileNotFoundError:
-        print(f"Error: Data file not found at {args.input_npz}.")
+        print(f"Error: Generative data file not found at {args.input_npz_generative}.")
         return
     except KeyError as e:
-        print(f"Error: Missing expected key {e} in data file {args.input_npz}.")
+        print(f"Error: Missing expected key {e} in generative data file {args.input_npz_generative}.")
         return
 
-    print(f"Data loaded. Shapes: X_cat_ids={X_cat_ids_sequences.shape}, X_num={X_num_sequences.shape}, y_p={y_p_targets.shape}, y_mu={y_mu_targets.shape}")
+    print(f"Generative data loaded. Shapes: X_sequences={X_sequences.shape}, Y_targets={Y_targets.shape}")
 
-    # --- BEGIN NAN/INF CHECK ---
-    print("\nChecking for NaNs/Infs in loaded data...")
-    if np.any(np.isnan(X_cat_ids_sequences)):
-        print("WARNING: NaNs found in X_cat_ids_sequences!")
-    if np.any(np.isinf(X_cat_ids_sequences)):
-        print("WARNING: Infs found in X_cat_ids_sequences!")
-    
-    if np.any(np.isnan(X_num_sequences)):
-        print("WARNING: NaNs found in X_num_sequences!")
-        # Optional: print count or location
-        print(f"  Total NaNs in X_num_sequences: {np.isnan(X_num_sequences).sum()}")
-    if np.any(np.isinf(X_num_sequences)):
-        print("WARNING: Infs found in X_num_sequences!")
-        print(f"  Total Infs in X_num_sequences: {np.isinf(X_num_sequences).sum()}")
-    
-    if np.any(np.isnan(y_p_targets)):
-        print("WARNING: NaNs found in y_p_targets! This should be one-hot encoded and not have NaNs.")
-    # y_mu_targets can have NaNs, so we don't warn here for that.
-    print("--- END NAN/INF CHECK ---\n")
-
-    # Validate loaded data against model_config (sequence_length, num_features)
-    if X_cat_ids_sequences.shape[1] != sequence_length or X_num_sequences.shape[1] != sequence_length:
-        print(f"Error: Sequence length in data ({X_cat_ids_sequences.shape[1]}) does not match model_config ({sequence_length}).")
+    # --- Data Validation (Optional but good practice) ---
+    if X_sequences.shape[2] != model_config_from_preprocessor['num_features_total']:
+        print(f"CRITICAL ERROR: num_features_total in data ({X_sequences.shape[2]}) does not match model_config ({model_config_from_preprocessor['num_features_total']}).")
         return
-    if X_num_sequences.shape[2] != num_numerical_features:
-        print(f"Error: Number of numerical features in data ({X_num_sequences.shape[2]}) does not match model_config ({num_numerical_features}).")
+    if X_sequences.shape[0] != Y_targets.shape[0]:
+        print(f"CRITICAL ERROR: Number of samples in X_sequences ({X_sequences.shape[0]}) does not match Y_targets ({Y_targets.shape[0]}).")
         return
-    # Add check for num_categorical_features if it's also in model_config and easily comparable
+    if Y_targets.shape[1] != model_config_from_preprocessor['num_features_total']:
+        print(f"CRITICAL ERROR: num_features_total in Y_targets ({Y_targets.shape[1]}) does not match model_config ({model_config_from_preprocessor['num_features_total']}).")
+        return
 
     # --- 3. Create Dataset and DataLoaders ---
-    dataset = TransactionSequenceDataset(X_cat_ids_sequences, X_num_sequences, y_p_targets, y_mu_targets)
+    dataset = GenerativeTransactionDataset(X_sequences, Y_targets)
     val_size = int(len(dataset) * VAL_SPLIT)
     train_size = len(dataset) - val_size
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, drop_last=False)
-    print(f"Created DataLoaders: Train size={len(train_dataset)}, Val size={len(val_dataset)}")
+    print(f"Created Generative DataLoaders: Train size={len(train_dataset)}, Val size={len(val_dataset)}")
 
     # --- 4. Device Configuration ---
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # --- 5. Instantiate Model ---
-    model = ArbitragePredictionModel(
-        asset_vocab_size=asset_vocab_size, 
-        type_vocab_size=type_vocab_size, 
-        status_vocab_size=status_vocab_size,
-        actor_type_vocab_size=actor_type_vocab_size,
-        asset_embed_dim=asset_embed_dim, 
-        type_embed_dim=type_embed_dim, 
-        status_embed_dim=status_embed_dim,
-        actor_type_embed_dim=actor_type_embed_dim,
-        num_numerical_features=num_numerical_features,
-        d_model=d_model, 
-        nhead=nhead, 
-        num_encoder_layers=num_encoder_layers, 
-        dim_feedforward=dim_feedforward,
-        p_target_classes=p_target_classes,
-        mu_target_dim=1,
-        dropout=dropout_rate, 
-        max_seq_len=sequence_length
-    ).to(device)
-    print("Model instantiated and moved to device.")
+    # --- 5. Instantiate Generative Model ---
+    # Embedding dim config can be an arg or loaded from a file if complex
+    embedding_config_for_model = json.loads(args.embedding_dim_config_json) if args.embedding_dim_config_json else DEFAULT_EMBEDDING_DIM_CONFIG
+    print(f"Using embedding_dim_config: {embedding_config_for_model}")
 
-    # --- 6. Define Loss Functions and Optimizer ---
-    p_loss_fn = nn.CrossEntropyLoss()
-    mu_loss_fn = nn.MSELoss(reduction='mean') # Explicitly set reduction='mean'
-    print(f"DEBUG_LOSS_FN: mu_loss_fn.reduction = {mu_loss_fn.reduction}")
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    
-    # ARB_SWAP ID for masking mu_loss (from model_config or a fixed known value)
-    # Assuming actor_type_to_id.json defines ARB_SWAP as 0, USER_SWAP as 1 etc.
-    # This should be robustly fetched if the mapping can change.
-    # For now, let's assume model_config helps, or we have a standard.
-    # If `actor_type_to_id.json` is standard, we could load it here, but `model_config` is preferred source for what model expects.
-    # For this example, we rely on p_target_classes and assume ARB_SWAP is ID 0 if not explicitly stated otherwise in model_config.
-    # A more robust way: model_config could store `{"ARB_SWAP": 0, ...}` directly or path to the mapping.
-    # For now, we will assume ARB_SWAP is index 0 as per previous setup if actor_type_map is not in model_config.
-    arb_swap_id = 0 # Default assumption: ARB_SWAP is class 0
-    # Try to get it from config if available
-    # arb_swap_id_from_config = model_config.get('actor_type_mappings', {}).get('ARB_SWAP')
-    # if arb_swap_id_from_config is not None: arb_swap_id = arb_swap_id_from_config
-    # else: print("Warning: ARB_SWAP ID not found in model_config, defaulting to 0.")
-    # For now, stick to simple assumption. The preprocessing saves actor_type_to_id.json which has ARB_SWAP:0
-    print(f"Using ARB_SWAP ID for mu_loss masking: {arb_swap_id} (Implicit: corresponds to first class if p_target_classes > 0)")
-        
-    print("Loss functions and optimizer defined.")
+    model = GenerativeTransactionModel(
+        model_config=model_config_from_preprocessor,
+        embedding_dim_config=embedding_config_for_model,
+        d_model=args.d_model, 
+        nhead=args.nhead, 
+        num_encoder_layers=args.num_encoder_layers, 
+        dim_feedforward=args.dim_feedforward,
+        dropout=args.dropout, 
+        max_seq_len=model_config_from_preprocessor.get('sequence_length', 10) # Get from config
+    ).to(device)
+    print("GenerativeTransactionModel instantiated and moved to device.")
+
+    # --- 6. Define Loss Functions and Optimizer (Composite Loss will be a separate function) ---
+    # The composite loss will be called inside the training loop.
+    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE) # Using AdamW
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3, factor=0.5, min_lr=1e-7)
+    print("Optimizer and LR Scheduler defined.")
 
     # --- 7. Training Loop ---
     best_val_loss = float('inf')
-    best_model_save_path = os.path.join(args.model_save_dir, "best_arbitrage_model.pth")
-    final_model_save_path = os.path.join(args.model_save_dir, "final_arbitrage_model.pth")
+    print(f"DEBUG: Best model save path: {args.best_model_save_path}")
+    print(f"DEBUG: Final model save path: {args.final_model_save_path}")
 
-    print("\nStarting training...")
+
+    print("\nStarting training for Generative Model...")
     for epoch in range(NUM_EPOCHS):
         model.train()
-        epoch_train_loss, epoch_train_p_loss, epoch_train_mu_loss = 0.0, 0.0, 0.0
+        epoch_train_total_loss = 0.0
+        epoch_train_cat_loss, epoch_train_num_loss, epoch_train_flag_loss = 0.0, 0.0, 0.0
         
-        for batch_idx, (X_cat_ids_batch, X_num_batch, y_p_batch, y_mu_batch) in enumerate(train_loader):
-            X_cat_ids_batch = X_cat_ids_batch.to(device)
-            X_num_batch = X_num_batch.to(device)
-            y_p_batch = y_p_batch.to(device)
-            y_mu_batch = y_mu_batch.to(device)
+        for batch_idx, (x_batch, y_batch) in enumerate(train_loader):
+            x_batch = x_batch.to(device)
+            y_batch = y_batch.to(device)
 
             optimizer.zero_grad()
-            p_logits, mu_preds = model(X_cat_ids_batch, X_num_batch)
-            y_p_indices = torch.argmax(y_p_batch, dim=1)
-            loss_p = p_loss_fn(p_logits, y_p_indices)
-
-            actual_next_actor_is_arb = (y_p_indices == arb_swap_id)
-            y_mu_is_not_nan = ~torch.isnan(y_mu_batch.squeeze())
-            mu_loss_calc_mask = actual_next_actor_is_arb & y_mu_is_not_nan
-            active_mu_targets_for_loss_count = mu_loss_calc_mask.sum().item()
-
-            if active_mu_targets_for_loss_count > 0:
-                mu_preds_masked = mu_preds.squeeze()[mu_loss_calc_mask]
-                y_mu_batch_masked = y_mu_batch.squeeze()[mu_loss_calc_mask]
-                mu_actual_loss = mu_loss_fn(mu_preds_masked, y_mu_batch_masked)
-            else:
-                mu_actual_loss = torch.tensor(0.0, device=device)
-
-            total_loss = loss_p + LAMBDA_MU * mu_actual_loss
+            predictions = model(x_batch)
+            
+            # Pass model.feature_output_info and model_config_from_preprocessor to loss function
+            total_loss, loss_components_batch = calculate_composite_loss(
+                predictions, y_batch, model.feature_output_info, device # model_config not needed here
+            )
+            
             total_loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0) # Gradient clipping
             optimizer.step()
 
-            epoch_train_loss += total_loss.item()
-            epoch_train_p_loss += loss_p.item()
-            if active_mu_targets_for_loss_count > 0:
-                 epoch_train_mu_loss += mu_actual_loss.item()
+            epoch_train_total_loss += total_loss.item()
+            epoch_train_cat_loss += loss_components_batch['categorical_loss'] # Already itemized and averaged if applicable
+            epoch_train_num_loss += loss_components_batch['numerical_loss']
+            epoch_train_flag_loss += loss_components_batch['flag_loss']
+
+            if batch_idx % 50 == 0: # Log every 50 batches
+                print(f"  Epoch {epoch+1}/{NUM_EPOCHS}, Batch {batch_idx}/{len(train_loader)}, Train Batch Loss: {total_loss.item():.4f}")
         
-        avg_train_loss = epoch_train_loss / len(train_loader)
-        avg_train_p_loss = epoch_train_p_loss / len(train_loader)
-        avg_train_mu_loss = epoch_train_mu_loss / len(train_loader) if len(train_loader) > 0 else 0 # Avoid division by zero with empty loader
+        avg_train_loss = epoch_train_total_loss / len(train_loader)
+        avg_train_cat_loss = epoch_train_cat_loss / len(train_loader) # These are sums of potentially pre-averaged items.
+        avg_train_num_loss = epoch_train_num_loss / len(train_loader) # Need to be careful here.
+        avg_train_flag_loss = epoch_train_flag_loss / len(train_loader) # The per-batch loss_components are already averaged if multiple feats of same type.
 
         # Validation loop
         model.eval()
-        epoch_val_loss, epoch_val_p_loss, epoch_val_mu_loss = 0.0, 0.0, 0.0
+        epoch_val_total_loss = 0.0
+        epoch_val_cat_loss, epoch_val_num_loss, epoch_val_flag_loss = 0.0, 0.0, 0.0
+        
         with torch.no_grad():
-            for X_cat_ids_batch, X_num_batch, y_p_batch, y_mu_batch in val_loader:
-                X_cat_ids_batch = X_cat_ids_batch.to(device)
-                X_num_batch = X_num_batch.to(device)
-                y_p_batch = y_p_batch.to(device)
-                y_mu_batch = y_mu_batch.to(device)
-
-                p_logits, mu_preds = model(X_cat_ids_batch, X_num_batch)
-                y_p_indices = torch.argmax(y_p_batch, dim=1)
-                loss_p = p_loss_fn(p_logits, y_p_indices)
-
-                actual_next_actor_is_arb = (y_p_indices == arb_swap_id)
-                y_mu_is_not_nan = ~torch.isnan(y_mu_batch.squeeze())
-                mu_loss_calc_mask = actual_next_actor_is_arb & y_mu_is_not_nan
-                active_mu_targets_for_loss_count = mu_loss_calc_mask.sum().item()
-
-                if active_mu_targets_for_loss_count > 0:
-                    mu_preds_masked = mu_preds.squeeze()[mu_loss_calc_mask]
-                    y_mu_batch_masked = y_mu_batch.squeeze()[mu_loss_calc_mask]
-                    mu_actual_loss = mu_loss_fn(mu_preds_masked, y_mu_batch_masked)
-                else:
-                    mu_actual_loss = torch.tensor(0.0, device=device)
+            for x_batch_val, y_batch_val in val_loader:
+                x_batch_val = x_batch_val.to(device)
+                y_batch_val = y_batch_val.to(device)
                 
-                total_loss = loss_p + LAMBDA_MU * mu_actual_loss
-                epoch_val_loss += total_loss.item()
-                epoch_val_p_loss += loss_p.item()
-                if active_mu_targets_for_loss_count > 0:
-                    epoch_val_mu_loss += mu_actual_loss.item()
+                predictions_val = model(x_batch_val)
+                total_loss_val, loss_components_val_batch = calculate_composite_loss(
+                    predictions_val, y_batch_val, model.feature_output_info, device # model_config not needed here
+                )
+                
+                epoch_val_total_loss += total_loss_val.item()
+                epoch_val_cat_loss += loss_components_val_batch['categorical_loss']
+                epoch_val_num_loss += loss_components_val_batch['numerical_loss']
+                epoch_val_flag_loss += loss_components_val_batch['flag_loss']
 
-        avg_val_loss = epoch_val_loss / len(val_loader) if len(val_loader) > 0 else 0
-        avg_val_p_loss = epoch_val_p_loss / len(val_loader) if len(val_loader) > 0 else 0
-        avg_val_mu_loss = epoch_val_mu_loss / len(val_loader) if len(val_loader) > 0 else 0
+        avg_val_loss = epoch_val_total_loss / len(val_loader) if len(val_loader) > 0 else 0
+        avg_val_cat_loss = epoch_val_cat_loss / len(val_loader) if len(val_loader) > 0 else 0
+        avg_val_num_loss = epoch_val_num_loss / len(val_loader) if len(val_loader) > 0 else 0
+        avg_val_flag_loss = epoch_val_flag_loss / len(val_loader) if len(val_loader) > 0 else 0
 
         print(f"Epoch [{epoch+1}/{NUM_EPOCHS}], "
-              f"Train Loss: {avg_train_loss:.4f} (P: {avg_train_p_loss:.4f}, Mu: {avg_train_mu_loss:.4f}), "
-              f"Val Loss: {avg_val_loss:.4f} (P: {avg_val_p_loss:.4f}, Mu: {avg_val_mu_loss:.4f})")
+              f"Train Loss: {avg_train_loss:.4f} (Cat: {avg_train_cat_loss:.4f}, Num: {avg_train_num_loss:.4f}, Flag: {avg_train_flag_loss:.4f}), "
+              f"Val Loss: {avg_val_loss:.4f} (Cat: {avg_val_cat_loss:.4f}, Num: {avg_val_num_loss:.4f}, Flag: {avg_val_flag_loss:.4f})")
+
+        scheduler.step(avg_val_loss) # Step the scheduler on validation loss
 
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
-            torch.save(model.state_dict(), best_model_save_path)
-            print(f"New best model saved to {best_model_save_path} (Val Loss: {best_val_loss:.4f})")
-
-    torch.save(model.state_dict(), final_model_save_path)
-    print(f"Final model saved to {final_model_save_path}")
-    print("Training complete.")
+            torch.save(model.state_dict(), args.best_model_save_path)
+            print(f"New best model saved to {args.best_model_save_path} (Val Loss: {best_val_loss:.4f})")
+    
+    torch.save(model.state_dict(), args.final_model_save_path)
+    print(f"Final model saved to {args.final_model_save_path}")
+    print("Training complete for Generative Model.")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train Arbitrage Prediction Model.")
-    parser.add_argument("--input-npz", type=str, required=True,
-                        help="Path to the input .npz file containing training sequences and targets.")
-    parser.add_argument("--model-config-path", type=str, required=True,
-                        help="Path to the model_config.json file.")
-    parser.add_argument("--model-save-dir", type=str, default=DEFAULT_MODEL_SAVE_DIR,
-                        help=f"Directory to save trained models. Default: {DEFAULT_MODEL_SAVE_DIR}")
-    # Potentially add other hyperparameters as args later if needed (LR, Epochs, Batch Size etc.)
+    parser = argparse.ArgumentParser(description="Train Generative Transaction Prediction Model.")
     
+    # Data and Config Paths
+    parser.add_argument("--input-npz-generative", type=str, default=os.path.join("data", "processed_ai_data_generative_test", DEFAULT_INPUT_NPZ_GENERATIVE),
+                        help="Path to the input .npz file with generative sequences and targets.")
+    parser.add_argument("--generative-model-config-path", type=str, 
+                        default=os.path.join("data", "processed_ai_data_generative_test", "thorchain_artifacts_v1", DEFAULT_GENERATIVE_MODEL_CONFIG_FILENAME),
+                        help="Path to the model_config_generative.json file from preprocessing.")
+    
+    # Model Save Paths
+    parser.add_argument("--model-save-dir", type=str, default=DEFAULT_MODEL_SAVE_DIR,
+                        help="Directory to save trained models.")
+    parser.add_argument("--best-model-save-path", type=str, default=DEFAULT_BEST_MODEL_GENERATIVE_SAVE_PATH,
+                        help="Path to save the best model (overwrite if exists).")
+    parser.add_argument("--final-model-save-path", type=str, default=DEFAULT_FINAL_MODEL_GENERATIVE_SAVE_PATH,
+                        help="Path to save the final model (overwrite if exists).")
+
+    # Model Hyperparameters (allow overriding defaults)
+    parser.add_argument("--embedding-dim-config-json", type=str, default=json.dumps(DEFAULT_EMBEDDING_DIM_CONFIG), 
+                        help='JSON string for embedding_dim_config. E.g., \'\'\'{"default_cat_embed_dim":16, ...}\'\'\'.')
+    parser.add_argument("--d_model", type=int, default=DEFAULT_D_MODEL)
+    parser.add_argument("--nhead", type=int, default=DEFAULT_NHEAD)
+    parser.add_argument("--num_encoder_layers", type=int, default=DEFAULT_NUM_ENCODER_LAYERS)
+    parser.add_argument("--dim_feedforward", type=int, default=DEFAULT_DIM_FEEDFORWARD)
+    parser.add_argument("--dropout", type=float, default=DEFAULT_DROPOUT)
+    
+    # Training Hyperparameters
+    parser.add_argument("--batch_size", type=int, default=BATCH_SIZE)
+    parser.add_argument("--learning_rate", type=float, default=LEARNING_RATE)
+    parser.add_argument("--num_epochs", type=int, default=NUM_EPOCHS)
+    parser.add_argument("--val_split", type=float, default=VAL_SPLIT)
+
     cli_args = parser.parse_args()
+    
+    # Update global vars from CLI args if needed (or pass cli_args to main)
+    BATCH_SIZE = cli_args.batch_size
+    LEARNING_RATE = cli_args.learning_rate
+    NUM_EPOCHS = cli_args.num_epochs
+    VAL_SPLIT = cli_args.val_split
+    
     main(cli_args) 

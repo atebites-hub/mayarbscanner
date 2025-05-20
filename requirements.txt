@@ -9,3 +9,4 @@ pycoingecko
 requests
 matplotlib
 seaborn 
+mmh3 

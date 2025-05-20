@@ -4,7 +4,16 @@
 
 The project aims to build an arbitrage scanner for the Maya Protocol. This involves fetching historical and real-time transaction data, preprocessing it for an AI model, and using that model to predict arbitrage opportunities. A Flask web UI will display the data and insights.
 
-Phase 1 (Data Fetching & Initial UI) is complete. We are currently in Phase 2 (Model Development).
+Phase 1 (Data Fetching & Initial UI) is complete. We are currently in Phase 2 (Model Development), which focused on predicting arbitrage type and a profit metric.
+
+**NEW DIRECTION (POST-PHASE 2):** We are pivoting towards a more fundamental and potentially powerful approach: a **Generative Transaction Prediction Model**.
+The new goal is to predict the *entire next transaction* in a sequence, given a history of preceding transactions. This involves:
+-   Including *all* transaction types (user swaps, arbitrage swaps, other actions) in the training data.
+-   Removing reliance on external price feeds like CoinGecko and focusing purely on the internal dynamics of the Maya Protocol.
+-   Developing a model that learns to generate the full feature set of the subsequent transaction.
+-   Arbitrage identification will become an *emergent property* derived from analyzing the sequence of predicted transactions, rather than a direct prediction target.
+
+This shift aims to build a deeper understanding of transaction flow dynamics on the Maya Protocol.
 
 A key clarification has been made:
 -   **Arbitrage transactions (`ARB_SWAP`)** are SWAP transactions that *do not* have an `affiliate_id`.
@@ -25,6 +34,13 @@ This new logic, along with a switch from Uniswap to CoinGecko for external price
     -   **Timestamp Conversion:** Maya Protocol timestamps (nanoseconds) are converted to seconds for CoinGecko.
     -   **Asset Identifier Mapping:** Ensuring all relevant asset strings from Maya data (e.g., 'ETH.ETH', 'ETH/ETH', specific contract addresses for ERC20s) are correctly mapped to CoinGecko IDs in `MAYA_TO_COINGECKO_MAP` is vital for comprehensive price fetching. This has been significantly improved.
 -   **Model Adaptation:** The AI model (`src/model.py`) and training script (`src/train_model.py`) will need substantial updates.
+
+**NEW CHALLENGES (Generative Model):**
+-   **Comprehensive Feature Engineering:** Defining a fixed schema that encompasses all possible features of any Maya transaction type and handling missing values effectively (e.g., special IDs, presence flags, feature hashing for addresses).
+-   **High-Dimensional Target Prediction:** The model will need to predict a large number of features for the next transaction, making the output layer and loss function more complex.
+-   **Composite Loss Function:** Designing a loss function that appropriately weights and combines errors from predicting different types of features (categorical, numerical).
+-   **Evaluation Metrics:** Developing new metrics to assess the quality of a fully predicted transaction (per-feature accuracy/error, overall transaction similarity).
+-   **Computational Resources:** Training a model to predict entire transactions might be more computationally intensive.
 
 ## High-level Task Breakdown (Phase 2 - Model Development)
 
@@ -130,7 +146,12 @@ This new logic, along with a switch from Uniswap to CoinGecko for external price
         -   [x] Preprocess test data (`data/test_transactions.csv` -> `data/processed_ai_data/test_sequences.npz`, using existing artifacts, 1118 sequences generated) (COMPLETED)
         -   [x] Evaluate model on test data (COMPLETED - See Executor's Feedback)
     -   [x] Sub-Task 2.6.6: Update `README.md` with new workflow instructions (COMPLETED)
--   [ ] **CURRENT FOCUS: Discuss evaluation results and decide next steps (Model Iteration or Phase 3)**
+-   [ ] **CURRENT FOCUS: Phase 3 - Generative Transaction Prediction Model.**
+    -   [x] Task 3.1: Define Comprehensive Transaction Feature Schema (COMPLETED - Initial Version)
+    -   [x] Task 3.2: Refactor `src/preprocess_ai_data.py` for Generative Model (COMPLETED)
+    -   [x] Task 3.3: Design and Implement Generative Model (`src/model.py`) (COMPLETED)
+    -   [x] Task 3.4: Update `src/train_model.py` for Generative Model (COMPLETED - Test run successful for 50 epochs)
+    -   [ ] Task 3.5: Develop `src/evaluate_model_generative.py` (IN PROGRESS - Evaluation script run, metrics generated for 50-epoch model)
 
 ## Executor's Feedback or Assistance Requests
 
@@ -204,28 +225,83 @@ This new logic, along with a switch from Uniswap to CoinGecko for external price
 -   When calculating profit metrics involving ratios or inverse prices (like `1/P_m`), be highly aware of potential numerical instability and division by small numbers leading to extreme outliers. 
 -   Simple percentile clipping might not be enough if the underlying distribution is extremely skewed; the percentiles themselves can be outliers.
 -   Log-transforming ratios (`log(A/B)`) can be an effective way to stabilize variance, make the distribution more symmetric, and handle scale issues for target variables in regression tasks, especially when A and B are prices or quantities.
+-   **Arbitrage Definition:** `ARB_SWAP` = SWAP type AND `affiliate_id` is NULL/empty. `USER_SWAP` = SWAP type AND `affiliate_id` is PRESENT.
+-   Ensure `model_config.json` is the single source of truth for parameters like vocab sizes and feature counts needed by both training and evaluation scripts to avoid mismatches.
+-   Masking loss calculations (e.g., for `mu_target` only on true `ARB_SWAP`s with non-NaN targets) is critical for focused learning.
+-   Clear separation of `train` and `test` modes in preprocessing is vital for reliable evaluation, ensuring artifacts (scalers, mappings) are learned only from training data and consistently applied to test data.
 
-## Future Enhancements (User Requested)
+## Future Enhancements (User Requested - PREVIOUSLY NOTED, review priority after Phase 3)
 
 -   **Expand Historical Data Fetching:** Increase the historical data collection period from the current 24 hours to approximately 100 days (~2400 hours). This will require:
     -   Modifying `src/fetch_realtime_transactions.py` to handle requests for extended time ranges.
     -   Implementing logic to handle API pagination if Midgard returns large datasets in chunks.
     -   Consideration for increased data storage and processing times for both data fetching and subsequent model training.
 
-## Lessons
+---
+## NEW Executor's Feedback or Assistance Requests (Phase 3 - Generative Model)
+*(This section will be populated as Phase 3 tasks are executed)*
 
--   **Arbitrage Definition:** `
+- **Task 3.1: Define Comprehensive Transaction Feature Schema (COMPLETED - Initial Version)**
+    - Created `Docs/GenerativeModel_Feature_Schema.md` based on THORChain Midgard API v2 `/actions` endpoint structure. This schema is believed to be a strong starting point for processing the user-provided `data/transactions_data.json`.
+    - The user-provided `data/transactions_data.json` (approx. 2.0MB) will be the primary data source for the initial development of the generative model. Its exact structure will be parsed in Task 3.2.
+    - Noted user request to update `src/fetch_realtime_transactions.py` to fetch raw JSON from Maya Midgard (approx. 10,000 transactions) for future data needs.
+    - Confirmed plan to implement feature hashing for addresses in `src/preprocess_ai_data.py` (Task 3.2) as per schema.
 
--   **Task 2.6 (Independent Train/Test) - Evaluate Model on Test Data:**
-    -   Model `models/best_arbitrage_model.pth` evaluated on `data/processed_ai_data/test_sequences.npz`.
-    -   **Actor Type Prediction:**
-        -   Overall Accuracy: 83.09%
-        -   `ARB_SWAP`: Precision=0.8309, Recall=1.0000, F1=0.9077
-        -   `NON_SWAP`: Precision=0.0000, Recall=0.0000, F1=0.0000 (All 189 NON_SWAP in test set misclassified as ARB_SWAP)
-        -   Confusion Matrix saved to `models/confusion_matrix_actor_type.png`.
-    -   **Profit (Mu) Prediction (for 287 true ARB_SWAPs with non-NaN targets):**
-        -   MSE: 118.7236
-        -   RMSE: 10.8960
-        -   MAE: 9.3089
-        -   Scatter plot saved to `models/scatter_plot_mu_profit.png`.
-    -   *Key Issue: Model struggles significantly with NON_SWAP classification, labeling them as ARB_SWAP.*
+- **Task 3.2: Refactor `src/preprocess_ai_data.py` for Generative Model (COMPLETED)**
+    - Overhauled `src/preprocess_ai_data.py` to align with `Docs/GenerativeModel_Feature_Schema.md` and the user-provided `data/transactions_data.json` (THORChain data).
+    - Removed all CoinGecko integration and arbitrage-specific target generation logic.
+    - Implemented new functions:
+        - `load_and_parse_raw_json()`: Loads actions from the input JSON file.
+        - `preprocess_actions_for_generative_model()`: Flattens raw transaction data according to the schema.
+        - `get_or_create_mapping_generative()`: Manages ID mappings for categorical features, ensuring PAD and UNKNOWN tokens.
+        - `process_categorical_features_generative()`: Applies ID mapping and feature hashing (using `mmh3`) to categorical columns.
+        - `process_numerical_features_generative()`: Converts, normalizes (1e8), and scales numerical columns using `StandardScaler`.
+        - `generate_sequences_and_targets_generative()`: Creates sequences where the target is the full feature vector of the next transaction.
+    - Introduced `CANONICAL_FEATURE_ORDER` list to ensure consistent feature ordering for the model.
+    - Script now saves processed data to `sequences_and_targets_generative_thorchain.npz` and artifacts (mappings, scaler, model config) to a specified artifacts directory (e.g., `data/processed_ai_data_generative_test/thorchain_artifacts_v1/`).
+    - The model configuration `model_config_generative_thorchain.json` now stores the canonical feature order, mapping details, hash vocabulary sizes, and scaler path.
+    - Added `mmh3` to `requirements.txt`.
+    - Successfully ran in `train` mode, generating `sequences_and_targets_generative_thorchain.npz` (1990 sequences, 41 features) and artifacts.
+
+- **Task 3.3: Design and Implement Generative Model (`src/model.py`) (COMPLETED)**
+    - Defined new `GenerativeTransactionModel` class in `src/model.py`.
+    - `__init__` takes `model_config` (from `model_config_generative_thorchain.json`) and `embedding_dim_config`.
+    - Dynamically creates `nn.Embedding` layers for ID-mapped and hashed categorical features based on `feature_columns_ordered` and vocabulary sizes parsed from `model_config` (vocab size lookup logic refined).
+    - Calculates the total concatenated dimension for the `input_projection` layer.
+    - `forward(self, x_sequence)` method accepts a single input tensor `x_sequence` of shape `(batch_size, seq_len, num_features_total)`.
+    - Processes each feature in the sequence: applies embeddings to categorical parts (ID-mapped and hashed), and prepares numerical/flag features for concatenation.
+    - Concatenated features are projected to `d_model`, passed through `PositionalEncoding` and `TransformerEncoder`.
+    - A final `output_projection` layer maps the transformer output to `total_output_dimension`, predicting the full feature vector of the next transaction. This output vector is a concatenation of logits for categorical features and single values for numerical/flag features.
+    - The model also stores `self.feature_output_info` detailing the type and output slice (start/end index in the `total_output_dimension` vector) for each feature, crucial for the loss function.
+    - Updated `if __name__ == '__main__':` block with a conceptual usage example for the new model.
+    - The old `ArbitragePredictionModel` class is effectively replaced.
+
+- **Task 3.4: Update `src/train_model.py` for Generative Model (COMPLETED - Test run successful for 50 epochs)**
+    - Adapted argument parsing for generative model data paths, model config path, and hyperparameters.
+    - Implemented `GenerativeTransactionDataset` and DataLoaders.
+    - Instantiates `GenerativeTransactionModel` using the loaded `model_config_generative_*.json`.
+    - Revised `calculate_composite_loss` function:
+        - Takes `model.feature_output_info` to correctly slice predictions and targets.
+        - Applies `nn.CrossEntropyLoss` to categorical feature predictions (logits) and targets (class IDs).
+        - Applies `nn.BCEWithLogitsLoss` to binary flag predictions (logits) and targets.
+        - Applies `nn.MSELoss` to numerical feature predictions and targets.
+        - Averages the total loss over the number of features for which loss was computed.
+    - Training loop uses the composite loss, AdamW optimizer, and ReduceLROnPlateau scheduler (removed `verbose` argument).
+    - Saves best and final models.
+    - Successfully ran a training for 50 epochs using data from Task 3.2. Best val loss ~0.5038. Model saved to `models/best_generative_model_thorchain.pth`.
+
+- **Task 3.5: Develop `src/evaluate_model_generative.py` (IN PROGRESS - Evaluation script run, metrics generated for 50-epoch model)**
+    - Created `src/evaluate_model_generative.py` with argument parsing for model/data paths.
+    - Includes logic for loading the model config, test data, and trained model weights.
+    - Implements per-feature metric calculation (Accuracy/F1 for categorical/binary, MSE/MAE for numerical) based on `model.feature_output_info`.
+    - Includes stubs for plotting confusion matrices and scatter plots (CM for `action_type_id` generated).
+    - Saves metrics to a JSON file (`evaluation_results_generative/evaluation_metrics.json`).
+    - Imports `GenerativeTransactionDataset` and `calculate_composite_loss` from `train_model.py`.
+    - Successfully evaluated the 50-epoch model. Overall test set loss ~0.5466. Metrics show significant improvement over 2-epoch model, especially for numericals and higher-cardinality categoricals.
+
+## NEW Lessons (from Phase 3 - Generative Model)
+*(This section will be populated as Phase 3 tasks are executed)*
+- The output layer of the `GenerativeTransactionModel` (`self.output_projection`) is designed to produce a single concatenated vector. This vector contains logits for categorical features (each categorical feature occupies `vocab_size` elements in this vector) and single predicted values for numerical and binary flag features. The `model.feature_output_info` attribute is essential for parsing this output vector correctly in the loss function, as it provides the start and end indices for each feature's segment within the concatenated output vector.
+- Ensure PyTorch arguments are compatible with the installed version (e.g., `verbose` argument for `ReduceLROnPlateau`).
+- Vocabulary size lookup in the model needs to correctly interpret the structure of `model_config['categorical_id_mapping_details']` (which stores mapping dicts, not just sizes) and robustly match feature names to mapping file keys.
+- When saving dictionaries containing PyTorch tensors to JSON, ensure tensors are converted to native Python types (e.g., using `.item()`) to avoid serialization errors.

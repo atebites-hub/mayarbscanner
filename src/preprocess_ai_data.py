@@ -1,389 +1,557 @@
-print("EXECUTOR_AGENT_SANITY_CHECK_PRINT_TOP_OF_FILE_V3")
+print("EXECUTOR_AGENT_SANITY_CHECK_PRINT_TOP_OF_FILE_V3_GENERATIVE")
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.preprocessing import StandardScaler
 import json
 import os
 import pickle
-from collections import Counter
-import requests
 import time
 from datetime import datetime
-from pycoingecko import CoinGeckoAPI
 import argparse
+import mmh3
 
 # --- Directory Constants (can be overridden by args where applicable) ---
 DEFAULT_DATA_DIR = "data"
-DEFAULT_PROCESSED_DATA_DIR = os.path.join(DEFAULT_DATA_DIR, "processed_ai_data")
-DEFAULT_MODELS_DIR = "models" # For model_config.json
+DEFAULT_PROCESSED_DATA_DIR_GENERATIVE = os.path.join(DEFAULT_DATA_DIR, "processed_ai_data_generative_test")
 
-# --- Default File Names (can be overridden by args) ---
-DEFAULT_INPUT_CSV = "historical_24hr_maya_transactions.csv"
-DEFAULT_OUTPUT_NPZ = "sequences_and_targets.npz"
-DEFAULT_SCALER_FILENAME = "scaler.pkl"
-DEFAULT_MODEL_CONFIG_FILENAME = "model_config.json"
-DEFAULT_ASSET_MAPPING_FILENAME = "asset_to_id.json"
-DEFAULT_TYPE_MAPPING_FILENAME = "type_to_id.json"
-DEFAULT_STATUS_MAPPING_FILENAME = "status_to_id.json"
-DEFAULT_ACTOR_TYPE_MAPPING_FILENAME = "actor_type_to_id.json"
-DEFAULT_CG_PRICE_CACHE_FILENAME = "coingecko_price_cache.json"
+# --- Default File Names (GENERATIVE MODEL - can be overridden by args) ---
+DEFAULT_INPUT_JSON = "transactions_data.json"
+DEFAULT_OUTPUT_NPZ_GENERATIVE = "sequences_and_targets_generative_thorchain.npz"
+DEFAULT_SCALER_FILENAME_GENERATIVE = "scaler_generative_thorchain.pkl"
+DEFAULT_MODEL_CONFIG_FILENAME_GENERATIVE = "model_config_generative_thorchain.json"
 
-# --- Stablecoin Maya Asset Names for CACAO Price Derivation ---
-RECOGNIZED_STABLECOIN_MAYA_ASSETS = {
-    'ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48',
-    'ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7',
-    'USDC.USDC',
-    'USDT.USDT'
-}
-
-# --- CoinGecko Configuration ---
-CG_CLIENT = CoinGeckoAPI()
-MAYA_TO_COINGECKO_MAP = {
-    'ETH.ETH': 'ethereum',
-    'BTC.BTC': 'bitcoin',
-    'KUJI.KUJI': 'kujira',
-    'USDC.USDC': 'usd-coin',
-    'USDT.USDT': 'tether',
-    'THOR.RUNE': 'thorchain',
-    'BTC/BTC': 'bitcoin',
-    'ETH/ETH': 'ethereum',
-    'DASH.DASH': 'dash',
-    'DASH/DASH': 'dash',
-    'ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48': 'usd-coin',
-    'ETH/USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48': 'usd-coin',
-    'ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7': 'tether',
-    'ETH/USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7': 'tether',
-    'XRD.XRD': 'radix',
-    'MAYA.CACAO': '29996',
-}
+# NEW mapping file names for generative model (will be dataset specific, e.g. thorchain)
+DEFAULT_ASSET_MAPPING_FILENAME_GENERATIVE = "asset_to_id_generative_thorchain.json"
+DEFAULT_TYPE_MAPPING_FILENAME_GENERATIVE = "type_to_id_generative_thorchain.json"
+DEFAULT_STATUS_MAPPING_FILENAME_GENERATIVE = "status_to_id_generative_thorchain.json"
+DEFAULT_MEMO_STATUS_MAPPING_FILENAME_GENERATIVE = "memo_status_to_id_generative_thorchain.json"
 
 # Sequence length for model input
 SEQUENCE_LENGTH = 10
 
-# Number of top arbitrageurs to track (remains for now, though not directly used in seq gen)
-TOP_K_ARBS = 10
+# --- Feature Hashing Constants ---
+HASH_SEED = 42
+HASH_VOCAB_SIZE_ADDRESS = 20000
+HASH_VOCAB_SIZE_AFFILIATE_ADDRESS = 5000
+HASH_VOCAB_SIZE_TX_ID = 10000
 
-SELECTED_FEATURES = [
-    "date", "status", "type", "pools", "in_asset", "in_amount", 
-    "out_asset", "out_amount", "swap_liquidity_fee", "swap_slip_bps", 
-    "swap_network_fee_asset", "swap_network_fee_amount", "transaction_id",
-    "memo_str", "affiliate_id"
+# --- Padding and Unknown ID Constants (examples, will be refined) ---
+PAD_TOKEN_STR = "PAD"
+UNKNOWN_TOKEN_STR = "UNKNOWN"
+NO_ASSET_STR = "NO_ASSET"
+NO_POOL_ASSET_STR = "NO_POOL"
+NO_ADDRESS_STR = "NO_ADDRESS"
+
+# --- NEW: Canonical Feature Order for the Generative Model ---
+# This order MUST be strictly maintained for model input/output consistency.
+# It should include all features produced by the preprocessing steps.
+CANONICAL_FEATURE_ORDER = [
+    # Global Action ID-mapped Categoricals
+    'action_status_id',
+    'action_type_id',
+    'pool1_asset_id',
+    'pool2_asset_id',
+    # Inbound Transaction ID-mapped/Hashed Categoricals & Flags
+    'in_tx_id_present_flag',
+    'in_address_present_flag',
+    'in_address_hash_id',
+    'in_memo_status_id',
+    'in_coin1_present_flag',
+    'in_coin1_asset_id',
+    # Outbound Transaction ID-mapped/Hashed Categoricals & Flags
+    'out_tx_id_present_flag',
+    'out_address_present_flag',
+    'out_address_hash_id',
+    'out_coin1_present_flag',
+    'out_coin1_asset_id',
+    # Metadata Binary Flags (action type indicators)
+    'meta_is_swap_flag',
+    'meta_is_addLiquidity_flag',
+    'meta_is_withdraw_flag',
+    'meta_is_refund_flag',
+    'meta_is_thorname_flag', # Assuming it might be added
+    # Swap Specific Metadata (ID-mapped, Hashed, Flags)
+    'meta_swap_networkFee1_asset_id',
+    'meta_swap_target_asset_id',
+    'meta_swap_affiliate_address_present_flag',
+    'meta_swap_affiliate_address_hash_id',
+    'meta_swap_memo_status_id',
+    'meta_swap_is_streaming_flag',
+    # AddLiquidity Metadata (none beyond flag for V1 based on current schema)
+    # Withdraw Metadata (none beyond flag for V1 based on current schema)
+    # Refund Metadata (ID-mapped)
+    # 'meta_refund_reason_id', # If a refund reason mapping is added
+    
+    # Scaled Numerical Features (Order them logically)
+    # Global Action Numerics
+    'action_date_unix_scaled',
+    'action_height_val_scaled',
+    # Inbound Numerics
+    'in_coin1_amount_norm_scaled',
+    # Outbound Numerics
+    'out_coin1_amount_norm_scaled',
+    # Swap Specific Numerics
+    'meta_swap_liquidityFee_norm_scaled',
+    'meta_swap_swapSlip_bps_val_scaled',
+    'meta_swap_networkFee1_amount_norm_scaled',
+    'meta_swap_affiliateFee_norm_scaled',
+    'meta_swap_streaming_count_val_scaled',
+    'meta_swap_streaming_quantity_norm_scaled',
+    # AddLiquidity Numerics
+    'meta_addLiquidity_units_val_scaled',
+    # Withdraw Numerics
+    'meta_withdraw_units_val_scaled',
+    'meta_withdraw_basis_points_val_scaled',
+    'meta_withdraw_asymmetry_val_scaled',
+    'meta_withdraw_imp_loss_protection_norm_scaled',
+    # (No specific numerics for refund or thorname in current V1 schema beyond flags/basic IDs)
 ]
 
-NUMERICAL_FEATURES_TO_SCALE = [
-    "in_amount_norm", "out_amount_norm", "swap_liquidity_fee_norm", 
-    "swap_slip_bps",
-    "swap_network_fee_amount_norm", 
-    "maya_price_P_m",
-    "coingecko_price_P_u",
-    "coingecko_price_P_u_out_asset"
-]
-
-# Will be dynamically determined based on mappings dir and args
-# CATEGORICAL_FEATURES_TO_MAP = {
-# "status": STATUS_MAPPING_FILE,
-# "type": TYPE_MAPPING_FILE,
-# "in_asset": ASSET_MAPPING_FILE, 
-# "out_asset": ASSET_MAPPING_FILE,
-# "swap_network_fee_asset": ASSET_MAPPING_FILE,
-# "actor_type_id": None 
-# }
-
-UNK_ACTOR_ID = 3 # Corresponds to UNK_ACTOR in actor_type_to_id.json
-
-def get_or_create_mapping(mapping_file_path, series=None, is_asset_mapping=False, default_value='UNKNOWN', mode='train'):
+def get_or_create_mapping_generative(mapping_file_path, series=None, mode='train', pad_token=PAD_TOKEN_STR, unknown_token=UNKNOWN_TOKEN_STR, is_asset_mapping=False):
+    """
+    Creates or loads a categorical feature mapping for the generative model.
+    Ensures PAD_TOKEN_STR maps to ID 0, and UNKNOWN_TOKEN_STR is present.
+    If is_asset_mapping is True, CACAO (if present) will not be forced to ID 0, PAD_TOKEN_STR takes precedence for ID 0.
+    """
+    print(f"Managing mapping for: {mapping_file_path} (Mode: {mode})")
     if mode == 'train':
         if os.path.exists(mapping_file_path):
-            print(f"Loading existing mapping: {mapping_file_path}")
-            with open(mapping_file_path, 'r') as f:
-                mapping = json.load(f)
-        else:
-            if series is None:
-                raise ValueError(f"Mapping file {mapping_file_path} not found and no series provided to create it in train mode.")
-            print(f"Creating new mapping: {mapping_file_path}")
-            unique_values = series.unique()
-            mapping = {val: i for i, val in enumerate(unique_values)}
-            if default_value not in mapping:
-                mapping[default_value] = len(mapping)
-            # Asset mapping specific logic (CACAO ID 0) remains, ensure it's called correctly
-            if is_asset_mapping and 'CACAO' not in mapping:
-                temp_mapping = {'CACAO': 0}
-                current_id = 1
-                for val, id_val in mapping.items():
-                    if val == 'CACAO': continue # Should not happen if CACAO not in mapping yet
-                    temp_mapping[val] = current_id
-                    current_id += 1
-                mapping = temp_mapping
-            elif is_asset_mapping and mapping.get('CACAO') != 0:
-                # If CACAO exists but not ID 0, re-arrange
-                cacao_id_old = mapping.pop('CACAO')
-                temp_mapping = {'CACAO': 0}
-                current_id = 1
-                # Assign new IDs, ensuring CACAO's old ID is reused if something was at 0
-                item_at_zero = None
-                for k,v in mapping.items():
-                    if v == 0:
-                        item_at_zero = k
-                        break
-                
-                for val, id_val in mapping.items():
-                    if val == item_at_zero: # This item was at ID 0
-                        temp_mapping[val] = cacao_id_old
+            print(f"  Train mode: Found existing mapping file. Will overwrite if structure is incorrect or if series forces new values.")
+            # Even if it exists, we might rebuild it if series is provided and contains new values
+            # or to ensure PAD/UNKNOWN structure.
+        
+        if series is None:
+            # If no series, but file exists, try to load and verify. If not, create empty with PAD/UNKNOWN.
+            if os.path.exists(mapping_file_path):
+                try:
+                    with open(mapping_file_path, 'r') as f:
+                        mapping = json.load(f)
+                    if pad_token in mapping and mapping[pad_token] == 0 and unknown_token in mapping:
+                        print(f"  Loaded existing valid mapping from {mapping_file_path} (no series provided).")
+                        return mapping
                     else:
-                        temp_mapping[val] = current_id
-                        current_id +=1
-                        if current_id == cacao_id_old and item_at_zero is not None: # Skip CACAO's old ID if it's being used
-                            current_id +=1 
-                mapping = temp_mapping
-
+                        print(f"  Existing mapping {mapping_file_path} is invalid/incomplete. Rebuilding.")
+                except json.JSONDecodeError:
+                    print(f"  Error reading existing mapping {mapping_file_path}. Rebuilding.")
+            # Create a basic mapping if no series and file bad/missing
+            print(f"  Creating new basic mapping (PAD/UNKNOWN only) for {mapping_file_path} as no series provided.")
+            mapping = {pad_token: 0, unknown_token: 1}
             with open(mapping_file_path, 'w') as f:
                 json.dump(mapping, f, indent=4)
+            return mapping
+
+        # If series is provided, build from scratch or update existing.
+        print(f"  Train mode: Building/updating mapping from series for {mapping_file_path}.")
+        unique_values = sorted(list(pd.Series(series).dropna().unique())) # Sort for consistent ID assignment
+        
+        mapping = {pad_token: 0} # PAD is always 0
+        current_id = 1
+
+        if unknown_token not in unique_values and unknown_token != pad_token:
+            mapping[unknown_token] = current_id
+            current_id += 1
+        
+        for val in unique_values:
+            if val == pad_token: # Already handled
+                continue
+            if val == unknown_token and unknown_token in mapping: # Already handled
+                continue
+            if val not in mapping: # Add new values
+                mapping[val] = current_id
+                current_id += 1
+        
+        # Ensure unknown_token is in, if it wasn't in unique_values and wasn't pad_token
+        if unknown_token not in mapping and unknown_token != pad_token:
+             mapping[unknown_token] = len(mapping) # Assign it the next available ID
+
+        with open(mapping_file_path, 'w') as f:
+            json.dump(mapping, f, indent=4)
+        print(f"  Saved new/updated mapping with {len(mapping)} entries to {mapping_file_path}")
+        
     elif mode == 'test':
         if not os.path.exists(mapping_file_path):
             raise FileNotFoundError(f"ERROR (test mode): Mapping file {mapping_file_path} not found. Test mode requires pre-existing mappings from a training run.")
-        print(f"Loading mapping for test mode: {mapping_file_path}")
+        print(f"  Loading mapping for test mode: {mapping_file_path}")
         with open(mapping_file_path, 'r') as f:
             mapping = json.load(f)
+        # Basic validation for test mode (PAD should be 0)
+        if pad_token not in mapping or mapping[pad_token] != 0:
+            print(f"WARNING (test mode): Loaded mapping from {mapping_file_path} does not have '{pad_token}' as ID 0. This might cause issues.")
+        if unknown_token not in mapping:
+            print(f"WARNING (test mode): Loaded mapping from {mapping_file_path} does not contain '{unknown_token}'. This might cause issues.")
     else:
         raise ValueError(f"Invalid mode: {mode}. Choose 'train' or 'test'.")
     return mapping
 
-def map_categorical_features(df, mappings_dir, mode='train'):
-    print("Mapping categorical features...")
-    
-    # Define base categorical features and their respective mapping file names
-    # actor_type_id is handled specially as it derives from actor_label
-    categorical_features_config = {
-        "status": DEFAULT_STATUS_MAPPING_FILENAME,
-        "type": DEFAULT_TYPE_MAPPING_FILENAME,
-        "in_asset": DEFAULT_ASSET_MAPPING_FILENAME,
-        "out_asset": DEFAULT_ASSET_MAPPING_FILENAME,
-        "swap_network_fee_asset": DEFAULT_ASSET_MAPPING_FILENAME
-    }
-    
-    all_mapped_id_feature_names = []
-    # Ensure asset mapping is loaded/created first if in train mode, or just loaded in test
-    asset_mapping_path = os.path.join(mappings_dir, DEFAULT_ASSET_MAPPING_FILENAME)
-    asset_mapping = get_or_create_mapping(asset_mapping_path, 
-                                          pd.concat([df['in_asset'], df['out_asset'], df['swap_network_fee_asset']]).dropna().unique() if mode == 'train' else None, 
-                                          is_asset_mapping=True, mode=mode)
-
-    for feature, mapping_filename_template in categorical_features_config.items():
-        mapping_file_path = os.path.join(mappings_dir, mapping_filename_template)
-        current_mapping = asset_mapping if "asset" in feature else get_or_create_mapping(mapping_file_path, df[feature] if mode == 'train' else None, mode=mode)
-        
-        default_id = current_mapping.get('UNKNOWN')
-        if default_id is None: 
-            default_id = max(current_mapping.values()) + 1 if current_mapping else 0
-            if mode == 'train': 
-                print(f"Adding 'UNKNOWN' with ID {default_id} to mapping {mapping_file_path}")
-                current_mapping['UNKNOWN'] = default_id
-                with open(mapping_file_path, 'w') as f: json.dump(current_mapping, f, indent=4)
-        
-        df[feature + '_mapped'] = df[feature].map(current_mapping).fillna(default_id).astype(int)
-        all_mapped_id_feature_names.append(feature + '_mapped')
-        print(f"  Mapped '{feature}' to '{feature}_mapped'. Unique IDs: {df[feature + '_mapped'].nunique()}")
-
-    # Handle actor_type_id separately
-    actor_type_mapping_path = os.path.join(mappings_dir, DEFAULT_ACTOR_TYPE_MAPPING_FILENAME)
-    # This mapping is static, so mode doesn't change creation, only ensures it exists or is correct
-    actor_type_map = get_or_create_actor_type_mapping(actor_type_mapping_path) 
-    df['actor_type_id_mapped'] = df['actor_type_id'].map(actor_type_map).fillna(actor_type_map.get('UNK_ACTOR')).astype(int)
-    all_mapped_id_feature_names.append('actor_type_id_mapped')
-    print(f"  Mapped 'actor_type_id' to 'actor_type_id_mapped'. Unique IDs: {df['actor_type_id_mapped'].nunique()}")
-    
-    return df, all_mapped_id_feature_names, asset_mapping # Return asset_mapping for vocab size
-
-def get_or_create_actor_type_mapping(mapping_file_path):
-    static_mapping = {'ARB_SWAP': 0, 'USER_SWAP': 1, 'NON_SWAP': 2, 'UNK_ACTOR': UNK_ACTOR_ID}
-    if not os.path.exists(mapping_file_path):
-        print(f"Creating static actor type mapping: {mapping_file_path}")
-        with open(mapping_file_path, 'w') as f:
-            json.dump(static_mapping, f, indent=4)
-    else:
-        with open(mapping_file_path, 'r') as f:
-            mapping = json.load(f)
-            # Ensure string keys from JSON are correctly compared if they were int-like
-            mapping_corrected_keys = {str(k) if isinstance(k, int) else k: v for k,v in mapping.items()}
-            if mapping_corrected_keys != static_mapping:
-                print(f"Warning: Existing actor type mapping {mapping_file_path} ({mapping_corrected_keys}) differs from static definition ({static_mapping}). Overwriting.")
-                with open(mapping_file_path, 'w') as f:
-                    json.dump(static_mapping, f, indent=4)
-                return static_mapping
-        print(f"Loaded actor type mapping: {mapping_file_path}")
-    return static_mapping
-
-def determine_actor_type(row):
-    tx_type = row.get('type')
-    affiliate_id = row.get('affiliate_id') 
-
-    if tx_type and isinstance(tx_type, str) and tx_type.upper() == 'SWAP':
-        if pd.isna(affiliate_id) or str(affiliate_id).strip() == "":
-            return 'ARB_SWAP'
-        else:
-            return 'USER_SWAP'
-    elif tx_type:
-        return 'NON_SWAP'
-    else:
-        return 'UNK_ACTOR'
-
-def preprocess_features(df, cg_price_cache_path, mappings_dir):
-    print("--- Entering preprocess_features ---")
-    df['coingecko_price_P_u'] = np.nan
-    df['coingecko_price_P_u_out_asset'] = np.nan
-    
-    price_cache = {}
-    if os.path.exists(cg_price_cache_path):
-        try:
-            with open(cg_price_cache_path, 'r') as f_cache:
-                loaded_cache_str_keys = json.load(f_cache)
-            processed_cache = {}
-            if isinstance(loaded_cache_str_keys, dict):
-                for str_key, value in loaded_cache_str_keys.items():
-                    try:
-                        actual_key_list = json.loads(str_key)
-                        if isinstance(actual_key_list, list) and len(actual_key_list) == 2:
-                            processed_cache[tuple(actual_key_list)] = value
-                        else:
-                            print(f"Warning: Parsed cache key '{str_key}' is not a list of 2 elements. Skipping.")
-                    except (json.JSONDecodeError, TypeError, ValueError) as e_parse:
-                        print(f"Warning: Error parsing cache key '{str_key}'. Error: {e_parse}. Skipping.")
-                price_cache = processed_cache
-                print(f"Loaded and processed {len(price_cache)} items from CoinGecko cache: {cg_price_cache_path}")
-            else:
-                print(f"Warning: Content from {cg_price_cache_path} not a dict. Empty cache.")
-        except json.JSONDecodeError:
-            print(f"Warning: CoinGecko cache {cg_price_cache_path} corrupted. Empty cache.")
-        except Exception as e:
-            print(f"Warning: Could not load CoinGecko cache {cg_price_cache_path}. Error: {e}. Empty cache.")
-    else:
-        print(f"CoinGecko cache not found ({cg_price_cache_path}). Empty cache.")
-
-    df['timestamp_raw'] = df['date'] 
-    df['actor_label'] = df.apply(determine_actor_type, axis=1)
-    actor_type_map = get_or_create_actor_type_mapping(os.path.join(mappings_dir, DEFAULT_ACTOR_TYPE_MAPPING_FILENAME))
-    df['actor_type_id'] = df['actor_label'].map(actor_type_map).fillna(actor_type_map.get('UNK_ACTOR')).astype(int)
-    print("Actor type distribution:")
-    print(df['actor_label'].value_counts(normalize=True) * 100)
-    
-    df['maya_price_P_m'] = np.nan
-    swap_filter = df['type'].str.upper() == 'SWAP'
-    valid_swaps = swap_filter & df['in_amount_norm'].notna() & (df['in_amount_norm'] != 0) & df['out_amount_norm'].notna()
-    df.loc[valid_swaps, 'maya_price_P_m'] = df.loc[valid_swaps, 'out_amount_norm'] / df.loc[valid_swaps, 'in_amount_norm']
-    df['maya_price_P_m'].replace([np.inf, -np.inf], np.nan, inplace=True)
-
-    print(f"DEBUG_PREPROC: Value counts of df['type'] BEFORE CoinGecko loop:\n{df['type'].value_counts()}")
-
-    unique_asset_date_pairs = set()
-    for index, row in df.iterrows():
-        if pd.notna(row['in_asset']):
-            # Convert nanosecond timestamp to seconds for datetime.fromtimestamp
-            timestamp_in_seconds = row['timestamp_raw'] / 1_000_000_000
-            unique_asset_date_pairs.add((row['in_asset'], datetime.fromtimestamp(timestamp_in_seconds).strftime('%d-%m-%Y')))
-        if pd.notna(row['out_asset']):
-            timestamp_in_seconds = row['timestamp_raw'] / 1_000_000_000
-            unique_asset_date_pairs.add((row['out_asset'], datetime.fromtimestamp(timestamp_in_seconds).strftime('%d-%m-%Y')))
-
-    cg_api_call_count = 0
-    for maya_asset, date_str in unique_asset_date_pairs:
-        cache_key = (maya_asset, date_str)
-        if cache_key in price_cache:
-            price = price_cache[cache_key]
-        else:
-            coingecko_id = MAYA_TO_COINGECKO_MAP.get(maya_asset)
-            if coingecko_id:
-                print(f"DEBUG_COINGECKO_LOOP: Attempt 1 for {coingecko_id} on {date_str}")
-                price = fetch_coingecko_price_at_timestamp(coingecko_id, date_str) # Pass date_str directly
-                cg_api_call_count += 1
-                if price is not None:
-                    price_cache[cache_key] = price
-                    print(f"DEBUG_COINGECKO: Found price for {coingecko_id} ({maya_asset}) on {date_str}: ${price}")
-                else:
-                    print(f"DEBUG_COINGECKO: No price found for {coingecko_id} ({maya_asset}) on {date_str} after retries.")
-            elif maya_asset == 'MAYA.CACAO': # Special handling for CACAO derivation if direct fetch fails or not mapped
-                print(f"DEBUG_CACAO_PRICE: Attempting to derive price for {maya_asset} on {date_str} as it's not directly fetched or mapped for direct fetch.")
-                # CACAO price derivation logic (simplified for this example, actual would be complex)
-                # This is a placeholder, actual CACAO derivation via stablecoin pairs needs careful implementation if required
-                # For now, if MAYA.CACAO ID '29996' fetch failed, we have no simple fallback here.
-                # price = derive_cacao_price_via_stablecoins(df, date_str, price_cache, MAYA_TO_COINGECKO_MAP, CG_CLIENT)
-                price = None # Placeholder
-                if price is not None:
-                    price_cache[cache_key] = price
-                else:
-                    print(f"DEBUG_CACAO_PRICE: Could not derive CACAO price for {date_str}.")
-            else:
-                price = None
-                print(f"DEBUG_COINGECKO: No CoinGecko ID for Maya asset {maya_asset}")
-        
-        if price is not None:
-            # Convert nanosecond timestamp to seconds for comparison
-            mask_in = (df['in_asset'] == maya_asset) & (df['timestamp_raw'].apply(lambda ts_ns: datetime.fromtimestamp(ts_ns / 1_000_000_000).strftime('%d-%m-%Y')) == date_str)
-            df.loc[mask_in, 'coingecko_price_P_u'] = price
-            mask_out = (df['out_asset'] == maya_asset) & (df['timestamp_raw'].apply(lambda ts_ns: datetime.fromtimestamp(ts_ns / 1_000_000_000).strftime('%d-%m-%Y')) == date_str)
-            df.loc[mask_out, 'coingecko_price_P_u_out_asset'] = price
-    
-    print(f"Made {cg_api_call_count} calls to CoinGecko API in this run.")
+def load_and_parse_raw_json(json_file_path):
+    """Loads raw JSON data and extracts the list of actions."""
+    print(f"Loading raw JSON data from: {json_file_path}")
     try:
-        cache_to_save = {json.dumps(list(k)): v for k, v in price_cache.items()} if price_cache else {}
-        with open(cg_price_cache_path, 'w') as f_cache:
-            json.dump(cache_to_save, f_cache, indent=4)
-        print(f"Saved updated CoinGecko price cache ({len(cache_to_save)} items) to: {cg_price_cache_path}")
-    except Exception as e:
-        print(f"Warning: Could not save CoinGecko price cache to {cg_price_cache_path}. Error: {e}")
-
-    print("--- P_m (Maya Price) Stats (End of preprocess_features) ---")
-    print(df['maya_price_P_m'].describe())
-    print("--- P_u (CoinGecko Price IN_ASSET) Stats ---")
-    print(df['coingecko_price_P_u'].describe())
-    print("--- P_u (CoinGecko Price OUT_ASSET) Stats ---")
-    print(df['coingecko_price_P_u_out_asset'].describe())
-    return df
-
-def normalize_amounts(df, amount_cols=['in_amount', 'out_amount', 'swap_liquidity_fee', 'swap_network_fee_amount']):
-    print("Normalizing amounts (dividing by 1e8)...")
-    for col in amount_cols:
-        if col in df.columns:
-            df[col + '_norm'] = pd.to_numeric(df[col], errors='coerce') / 1e8
+        with open(json_file_path, 'r') as f:
+            data = json.load(f)
+        if "actions" in data and isinstance(data["actions"], list):
+            actions_list = data["actions"]
+            print(f"Loaded {len(actions_list)} actions from JSON file.")
+            return actions_list
         else:
-            print(f"Warning: Column {col} not found for normalization.")
-            df[col + '_norm'] = np.nan # Ensure the column exists if it was expected
-    return df
+            print("Error: JSON file does not contain an 'actions' list.")
+            return []
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON from {json_file_path}: {e}")
+        return []
+    except Exception as e:
+        print(f"An unexpected error occurred while loading {json_file_path}: {e}")
+        return []
 
-def scale_numerical_features(df, features_to_scale, scaler_path, mode='train'):
-    print(f"Scaling numerical features: {features_to_scale} (Mode: {mode})")
+def preprocess_actions_for_generative_model(actions_list, artifacts_dir, mode='train'):
+    """
+    Main function to process a list of action dictionaries into a flat feature DataFrame
+    according to the generative model schema (hardcoded logic for V1 based on schema doc).
+    This version focuses on flattening and initial feature extraction.
+    Mappings, hashing, and scaling will be done in subsequent dedicated functions.
+    """
+    print(f"Starting preprocessing (flattening & initial extraction) for generative model. Mode: {mode}. Actions: {len(actions_list)}")
     
-    scaled_feature_names_result = [f + '_scaled' for f in features_to_scale]
+    processed_data_list = []
+    for idx, action in enumerate(actions_list):
+        flat_features = {}
+
+        # --- Global Action Features ---
+        flat_features['action_date_raw'] = action.get('date') # Keep as ns string for now
+        flat_features['action_height_raw'] = action.get('height') # Keep as string for now
+        flat_features['action_status_raw'] = action.get('status', UNKNOWN_TOKEN_STR) # Default to UNKNOWN
+        flat_features['action_type_raw'] = action.get('type', UNKNOWN_TOKEN_STR) # Default to UNKNOWN
+        
+        pools = action.get('pools', [])
+        flat_features['pool1_asset_raw'] = pools[0] if len(pools) > 0 else NO_POOL_ASSET_STR
+        flat_features['pool2_asset_raw'] = pools[1] if len(pools) > 1 else NO_POOL_ASSET_STR
+
+        # --- Inbound Transaction Features (First `in` entry) ---
+        in_tx_list = action.get('in', [])
+        in_tx = in_tx_list[0] if in_tx_list else {}
+        
+        flat_features['in_tx_id_present_flag'] = 1 if in_tx.get('txID') else 0
+        # flat_features['in_tx_id_raw'] = in_tx.get('txID', '') # Not directly used for V1, presence flag is enough
+        
+        flat_features['in_address_present_flag'] = 1 if in_tx.get('address') else 0
+        flat_features['in_address_raw'] = in_tx.get('address', NO_ADDRESS_STR) # For hashing later
+        
+        in_memo = in_tx.get('memo')
+        if in_memo is None:
+            flat_features['in_memo_status_raw'] = "NO_MEMO"
+        elif in_memo == "":
+            flat_features['in_memo_status_raw'] = "EMPTY_MEMO"
+        else:
+            flat_features['in_memo_status_raw'] = "NON_EMPTY_MEMO"
+
+        in_coins_list = in_tx.get('coins', [])
+        in_coin1 = in_coins_list[0] if in_coins_list else {}
+        flat_features['in_coin1_present_flag'] = 1 if in_coin1 else 0
+        flat_features['in_coin1_asset_raw'] = in_coin1.get('asset', NO_ASSET_STR)
+        flat_features['in_coin1_amount_raw'] = in_coin1.get('amount', '0') # Keep as string for now
+        # flat_features['in_coin1_affiliate_present_flag'] will be primarily from metadata.swap for V1
+
+        # --- Outbound Transaction Features (First `out` entry) ---
+        out_tx_list = action.get('out', [])
+        out_tx = out_tx_list[0] if out_tx_list else {}
+        
+        flat_features['out_tx_id_present_flag'] = 1 if out_tx.get('txID') else 0
+        # flat_features['out_tx_id_raw'] = out_tx.get('txID', '') # V1: presence flag
+
+        flat_features['out_address_present_flag'] = 1 if out_tx.get('address') else 0
+        flat_features['out_address_raw'] = out_tx.get('address', NO_ADDRESS_STR) # For hashing later
+
+        out_coins_list = out_tx.get('coins', [])
+        out_coin1 = out_coins_list[0] if out_coins_list else {}
+        flat_features['out_coin1_present_flag'] = 1 if out_coin1 else 0
+        flat_features['out_coin1_asset_raw'] = out_coin1.get('asset', NO_ASSET_STR)
+        flat_features['out_coin1_amount_raw'] = out_coin1.get('amount', '0') # Keep as string
+
+        # --- Metadata Features (Flattened, default to 0/PAD/NO_ASSET if not applicable action_type) ---
+        metadata = action.get('metadata', {})
+        action_type_upper = str(action.get('type', '')).upper()
+
+        # Swap Metadata
+        flat_features['meta_is_swap_flag'] = 1 if action_type_upper == 'SWAP' else 0
+        swap_meta = metadata.get('swap', {})
+        flat_features['meta_swap_liquidityFee_raw'] = swap_meta.get('liquidityFee', '0') if flat_features['meta_is_swap_flag'] else '0'
+        flat_features['meta_swap_swapSlip_bps_raw'] = swap_meta.get('swapSlip', '0') if flat_features['meta_is_swap_flag'] else '0' # Schema uses 'swapSlip_bps', API might be 'swapSlip'
+        
+        # Network fees in swap metadata are often in an array. For V1, take first if present.
+        swap_network_fees = swap_meta.get('networkFees', []) 
+        swap_network_fee1 = swap_network_fees[0] if swap_network_fees else {}
+        flat_features['meta_swap_networkFee1_asset_raw'] = swap_network_fee1.get('asset', NO_ASSET_STR) if flat_features['meta_is_swap_flag'] else NO_ASSET_STR
+        flat_features['meta_swap_networkFee1_amount_raw'] = swap_network_fee1.get('amount', '0') if flat_features['meta_is_swap_flag'] else '0'
+        
+        flat_features['meta_swap_target_asset_raw'] = swap_meta.get('targetAsset', NO_ASSET_STR) if flat_features['meta_is_swap_flag'] else NO_ASSET_STR
+        
+        affiliate_address = swap_meta.get('affiliateAddress')
+        flat_features['meta_swap_affiliate_address_present_flag'] = 1 if flat_features['meta_is_swap_flag'] and affiliate_address else 0
+        flat_features['meta_swap_affiliate_address_raw'] = affiliate_address if flat_features['meta_swap_affiliate_address_present_flag'] else NO_ADDRESS_STR
+        flat_features['meta_swap_affiliateFee_amount_raw'] = swap_meta.get('affiliateFee', '0') if flat_features['meta_swap_affiliate_address_present_flag'] else '0'
+
+        swap_memo = swap_meta.get('memo')
+        if not flat_features['meta_is_swap_flag'] or swap_memo is None:
+            flat_features['meta_swap_memo_status_raw'] = "NO_MEMO"
+        elif swap_memo == "":
+            flat_features['meta_swap_memo_status_raw'] = "EMPTY_MEMO"
+        else:
+            flat_features['meta_swap_memo_status_raw'] = "NON_EMPTY_MEMO"
+
+        flat_features['meta_swap_is_streaming_flag'] = 1 if flat_features['meta_is_swap_flag'] and swap_meta.get('isStreamingSwap') else 0
+        flat_features['meta_swap_streaming_count_raw'] = str(swap_meta.get('streamingSwapCount', '0')) if flat_features['meta_swap_is_streaming_flag'] else '0' # API might be streamingSwap.count
+        flat_features['meta_swap_streaming_quantity_raw'] = swap_meta.get('streamingSwapQuantity', '0') if flat_features['meta_swap_is_streaming_flag'] else '0'
+
+        # AddLiquidity Metadata
+        flat_features['meta_is_addLiquidity_flag'] = 1 if action_type_upper == 'ADDLIQUIDITY' else 0
+        add_lp_meta = metadata.get('addLiquidity', {})
+        flat_features['meta_addLiquidity_units_raw'] = add_lp_meta.get('liquidityUnits', '0') if flat_features['meta_is_addLiquidity_flag'] else '0'
+
+        # Withdraw Metadata
+        flat_features['meta_is_withdraw_flag'] = 1 if action_type_upper == 'WITHDRAW' or action_type_upper == 'WITHDRAWLIQUIDITY' else 0
+        withdraw_meta = metadata.get('withdraw', {})
+        flat_features['meta_withdraw_units_raw'] = withdraw_meta.get('liquidityUnits', '0') if flat_features['meta_is_withdraw_flag'] else '0'
+        flat_features['meta_withdraw_basis_points_raw'] = withdraw_meta.get('basisPoints', '0') if flat_features['meta_is_withdraw_flag'] else '0' # Schema says basis_points, API might be basisPoints
+        flat_features['meta_withdraw_asymmetry_raw'] = withdraw_meta.get('asymmetry', '0.0') if flat_features['meta_is_withdraw_flag'] else '0.0' # String float
+        flat_features['meta_withdraw_imp_loss_protection_raw'] = withdraw_meta.get('ilProtection', '0') if flat_features['meta_is_withdraw_flag'] else '0' # Schema says imp_loss_protection, API might be ilProtection
+
+        # Refund Metadata
+        flat_features['meta_is_refund_flag'] = 1 if action_type_upper == 'REFUND' else 0
+        refund_meta = metadata.get('refund', {})
+        # Example: Schema indicates a `meta_refund_reason_status_raw` or similar. This would need parsing from API's refund details.
+        # For V1, if detailed refund reason isn't consistently structured or easily categorizable, a simple presence flag or UNKNOWN for status.
+        flat_features['meta_refund_reason_raw'] = refund_meta.get('reason', UNKNOWN_TOKEN_STR) if flat_features['meta_is_refund_flag'] else UNKNOWN_TOKEN_STR # Placeholder for now
+        
+        # THORName metadata (Example, if present)
+        flat_features['meta_is_thorname_flag'] = 1 if action_type_upper == 'THORNAME' else 0
+        # thorname_meta = metadata.get('thorname', {})
+        # flat_features['meta_thorname_name_raw'] = thorname_meta.get('name', UNKNOWN_TOKEN_STR) if flat_features['meta_is_thorname_flag'] else UNKNOWN_TOKEN_STR
+        # ... other thorname fields ...
+
+        # Other action types (donate, switch, etc.) would have similar blocks if they have specific metadata
+        # For now, their flags would be 0 and their specific metadata fields would get default '0'/NO_ASSET_STR/etc.
+
+        processed_data_list.append(flat_features)
+        
+    df = pd.DataFrame(processed_data_list)
+    print(f"Initial DataFrame created with {len(df)} rows and {len(df.columns)} columns from raw actions.")
+    
+    # Define the expected order of columns after this initial raw extraction step.
+    # This helps ensure consistency before further processing and for debugging.
+    # This list should align with the features defined in this flattening step.
+    initial_raw_feature_columns = sorted(list(df.columns)) # For now, just sort them alphabetically
+    df = df[initial_raw_feature_columns] # Reorder DF by these names
+    
+    print("Columns after initial flattening (alphabetical order for now):")
+    for col_name in df.columns:
+        print(f"  - {col_name}")
+
+    # This function will eventually return more, like mappings and scaler, but for now, just the df.
+    # The other parts (ID mapping, hashing, scaling) will be separate functions called in main().
+    return df, initial_raw_feature_columns # Return df and the column order
+
+def process_categorical_features_generative(df_input, artifacts_dir, mode='train'):
+    """
+    Processes categorical features in the DataFrame by:
+    1. Applying ID mapping to low/mid cardinality categoricals (e.g., type, status, assets).
+    2. Applying feature hashing to high cardinality categoricals (e.g., addresses).
+    Returns the DataFrame with new processed feature columns and a list of these column names.
+    """
+    print(f"Processing categorical features for generative model. Mode: {mode}")
+    df = df_input.copy()
+    processed_categorical_column_names = []
+    all_mappings_created = {}
+
+    # --- 1. ID Mapping for Low/Mid Cardinality Categoricals ---
+    # Define features to ID map and their corresponding raw column and mapping file suffix
+    # The actual mapping filename will be like: args.dataset_name + mapping_file_suffix
+    # For now, using the global DEFAULT_*_MAPPING_FILENAME_GENERATIVE constants
+    
+    id_map_configs = [
+        {'raw_col': 'action_status_raw', 'id_col': 'action_status_id', 'map_file': DEFAULT_STATUS_MAPPING_FILENAME_GENERATIVE},
+        {'raw_col': 'action_type_raw', 'id_col': 'action_type_id', 'map_file': DEFAULT_TYPE_MAPPING_FILENAME_GENERATIVE},
+        {'raw_col': 'in_memo_status_raw', 'id_col': 'in_memo_status_id', 'map_file': DEFAULT_MEMO_STATUS_MAPPING_FILENAME_GENERATIVE},
+        {'raw_col': 'meta_swap_memo_status_raw', 'id_col': 'meta_swap_memo_status_id', 'map_file': DEFAULT_MEMO_STATUS_MAPPING_FILENAME_GENERATIVE}, # Reuses memo status map
+        # Asset columns will be handled together to create one asset_to_id map
+        # {'raw_col': 'meta_refund_reason_raw', 'id_col': 'meta_refund_reason_id', 'map_file': "refund_reason_to_id_generative_thorchain.json"}, # Example if needed
+    ]
+
+    for config in id_map_configs:
+        raw_col, id_col, map_file_name = config['raw_col'], config['id_col'], config['map_file']
+        mapping_file_path = os.path.join(artifacts_dir, map_file_name)
+        
+        series_for_mapping = df[raw_col] if mode == 'train' else None
+        current_mapping = get_or_create_mapping_generative(mapping_file_path, series_for_mapping, mode)
+        all_mappings_created[map_file_name] = current_mapping
+        
+        # Use UNKNOWN_TOKEN_STR's ID for any unmappable values in test mode or if not in train series
+        unknown_id = current_mapping.get(UNKNOWN_TOKEN_STR)
+        if unknown_id is None: # Should not happen if get_or_create_mapping_generative works correctly
+            print(f"WARNING: UNKNOWN_TOKEN_STR not found in mapping {map_file_name}. Using fallback ID 0 for {id_col}.")
+            unknown_id = 0 
+            
+        df[id_col] = df[raw_col].map(current_mapping).fillna(unknown_id).astype(int)
+        processed_categorical_column_names.append(id_col)
+        print(f"  ID Mapped '{raw_col}' to '{id_col}'. Unique IDs: {df[id_col].nunique()}")
+
+    # Special handling for ASSET ID mapping (consolidated)
+    asset_raw_columns = [
+        'pool1_asset_raw', 'pool2_asset_raw',
+        'in_coin1_asset_raw', 'out_coin1_asset_raw',
+        'meta_swap_networkFee1_asset_raw', 'meta_swap_target_asset_raw'
+    ]
+    asset_id_columns = [
+        'pool1_asset_id', 'pool2_asset_id',
+        'in_coin1_asset_id', 'out_coin1_asset_id',
+        'meta_swap_networkFee1_asset_id', 'meta_swap_target_asset_id'
+    ]
+    
+    asset_mapping_file_path = os.path.join(artifacts_dir, DEFAULT_ASSET_MAPPING_FILENAME_GENERATIVE)
+    if mode == 'train':
+        # Consolidate all unique asset strings from all relevant columns
+        all_asset_values = pd.Series(dtype=str)
+        for col in asset_raw_columns:
+            if col in df:
+                all_asset_values = pd.concat([all_asset_values, df[col][df[col] != NO_ASSET_STR]])
+        unique_assets = all_asset_values.dropna().unique()
+        asset_mapping = get_or_create_mapping_generative(asset_mapping_file_path, unique_assets, mode, is_asset_mapping=True)
+    else: # Test mode
+        asset_mapping = get_or_create_mapping_generative(asset_mapping_file_path, None, mode, is_asset_mapping=True)
+    all_mappings_created[DEFAULT_ASSET_MAPPING_FILENAME_GENERATIVE] = asset_mapping
+    
+    pad_asset_id = asset_mapping.get(PAD_TOKEN_STR) # Should be 0
+    unknown_asset_id = asset_mapping.get(UNKNOWN_TOKEN_STR)
+    if unknown_asset_id is None: unknown_asset_id = pad_asset_id # Fallback
+
+    for raw_col, id_col in zip(asset_raw_columns, asset_id_columns):
+        if raw_col in df:
+            # Map NO_ASSET_STR to pad_asset_id explicitly, others to their map or unknown_asset_id
+            df[id_col] = df[raw_col].apply(lambda x: pad_asset_id if x == NO_ASSET_STR else asset_mapping.get(x, unknown_asset_id))
+            df[id_col] = df[id_col].astype(int)
+            processed_categorical_column_names.append(id_col)
+            print(f"  ID Mapped Asset '{raw_col}' to '{id_col}'. Unique IDs: {df[id_col].nunique()}")
+        else:
+            print(f"Warning: Asset raw column '{raw_col}' not found in DataFrame for ID mapping.")
+
+    # --- 2. Feature Hashing for High Cardinality Categoricals ---
+    # Vocab size for hashing will be HASH_VOCAB_SIZE_ADDRESS, PAD_HASH_ID will be HASH_VOCAB_SIZE_ADDRESS (i.e. index N for vocab 0..N-1)
+    PAD_ADDRESS_HASH_ID = HASH_VOCAB_SIZE_ADDRESS 
+    PAD_AFFILIATE_HASH_ID = HASH_VOCAB_SIZE_AFFILIATE_ADDRESS
+
+    hash_configs = [
+        {'raw_col': 'in_address_raw', 'hash_col': 'in_address_hash_id', 'vocab_size': HASH_VOCAB_SIZE_ADDRESS, 'pad_id': PAD_ADDRESS_HASH_ID},
+        {'raw_col': 'out_address_raw', 'hash_col': 'out_address_hash_id', 'vocab_size': HASH_VOCAB_SIZE_ADDRESS, 'pad_id': PAD_ADDRESS_HASH_ID},
+        {'raw_col': 'meta_swap_affiliate_address_raw', 'hash_col': 'meta_swap_affiliate_address_hash_id', 'vocab_size': HASH_VOCAB_SIZE_AFFILIATE_ADDRESS, 'pad_id': PAD_AFFILIATE_HASH_ID},
+    ]
+
+    for config in hash_configs:
+        raw_col, hash_col, vocab_size, pad_id_val = config['raw_col'], config['hash_col'], config['vocab_size'], config['pad_id']
+        if raw_col in df:
+            def hash_or_pad(value):
+                if value == NO_ADDRESS_STR or pd.isna(value) or value == '':
+                    return pad_id_val
+                return mmh3.hash(str(value), seed=HASH_SEED) % vocab_size
+            
+            df[hash_col] = df[raw_col].apply(hash_or_pad).astype(int)
+            processed_categorical_column_names.append(hash_col)
+            print(f"  Feature Hashed '{raw_col}' to '{hash_col}'. Vocab Size: {vocab_size}. Unique IDs: {df[hash_col].nunique()}")
+        else:
+            print(f"Warning: Address raw column '{raw_col}' not found in DataFrame for hashing.")
+
+    # --- 3. Collect Binary Flag Column Names (already created during flattening) ---
+    binary_flag_columns = [col for col in df.columns if col.endswith('_flag') or col.endswith('_present_flag')]
+    processed_categorical_column_names.extend(binary_flag_columns)
+    print(f"  Collected {len(binary_flag_columns)} binary flag columns: {binary_flag_columns}")
+
+    print(f"Total processed categorical/flag columns: {len(processed_categorical_column_names)}")
+    return df, processed_categorical_column_names, all_mappings_created
+
+def process_numerical_features_generative(df_input, scaler_path, mode='train'):
+    """
+    Processes numerical features by:
+    1. Converting raw string numericals (dates, amounts, fees, etc.) to numeric types.
+    2. Normalizing amounts by 1e8 where applicable.
+    3. Scaling all processed numerical features using StandardScaler.
+    Returns the DataFrame with new scaled numerical columns and a list of these column names.
+    """
+    print(f"Processing numerical features for generative model. Mode: {mode}")
+    df = df_input.copy()
+    processed_numerical_column_names = []
+    
+    # --- 1. Convert to Numeric & Normalize (where applicable) ---
+    # Date/Height
+    if 'action_date_raw' in df:
+        df['action_date_unix'] = pd.to_numeric(df['action_date_raw'], errors='coerce') / 1_000_000_000 # ns to s
+        processed_numerical_column_names.append('action_date_unix')
+    if 'action_height_raw' in df:
+        df['action_height_val'] = pd.to_numeric(df['action_height_raw'], errors='coerce')
+        processed_numerical_column_names.append('action_height_val')
+
+    # Columns needing 1e8 normalization (typically amounts, fees)
+    # List all _raw columns that represent amounts that need 1e8 normalization
+    amount_norm_cols_map = {
+        'in_coin1_amount_raw': 'in_coin1_amount_norm',
+        'out_coin1_amount_raw': 'out_coin1_amount_norm',
+        'meta_swap_liquidityFee_raw': 'meta_swap_liquidityFee_norm',
+        'meta_swap_networkFee1_amount_raw': 'meta_swap_networkFee1_amount_norm',
+        'meta_swap_affiliateFee_amount_raw': 'meta_swap_affiliateFee_norm',
+        'meta_swap_streaming_quantity_raw': 'meta_swap_streaming_quantity_norm',
+        'meta_withdraw_imp_loss_protection_raw': 'meta_withdraw_imp_loss_protection_norm'
+    }
+    for raw_col, norm_col in amount_norm_cols_map.items():
+        if raw_col in df:
+            df[norm_col] = pd.to_numeric(df[raw_col], errors='coerce') / 1e8
+            processed_numerical_column_names.append(norm_col)
+        else:
+            print(f"Warning: Amount column '{raw_col}' not found for 1e8 normalization.")
+
+    # Other numericals (no 1e8 normalization, just convert to numeric)
+    other_numeric_cols_map = {
+        'meta_swap_swapSlip_bps_raw': 'meta_swap_swapSlip_bps_val',
+        'meta_swap_streaming_count_raw': 'meta_swap_streaming_count_val',
+        'meta_addLiquidity_units_raw': 'meta_addLiquidity_units_val',
+        'meta_withdraw_units_raw': 'meta_withdraw_units_val',
+        'meta_withdraw_basis_points_raw': 'meta_withdraw_basis_points_val',
+        'meta_withdraw_asymmetry_raw': 'meta_withdraw_asymmetry_val' # Already float-like string
+    }
+    for raw_col, val_col in other_numeric_cols_map.items():
+        if raw_col in df:
+            df[val_col] = pd.to_numeric(df[raw_col], errors='coerce')
+            processed_numerical_column_names.append(val_col)
+        else:
+            print(f"Warning: Numeric column '{raw_col}' not found for conversion.")
+    
+    # Ensure all listed processed_numerical_column_names actually exist, fill NaNs before scaling
+    # This is important because if a raw col was missing, its processed version wouldn't be created.
+    final_numerical_cols_to_scale = []
+    for col_name in processed_numerical_column_names:
+        if col_name in df:
+            final_numerical_cols_to_scale.append(col_name)
+        else:
+            print(f"Warning: Column {col_name} was expected but not found in df before scaling. Skipping.")
+    
+    if not final_numerical_cols_to_scale:
+        print("No numerical features to scale. Returning DataFrame as is from numerical processing.")
+        return df, [] # Return empty list for scaled names
+
+    print(f"Numerical columns to be scaled: {final_numerical_cols_to_scale}")
+
+    # --- 2. Scale Numerical Features ---
+    scaled_feature_names_result = [f + '_scaled' for f in final_numerical_cols_to_scale]
 
     if mode == 'train':
         scaler = StandardScaler()
-        existing_features_to_scale = [f for f in features_to_scale if f in df.columns]
-        missing_features = [f for f in features_to_scale if f not in df.columns]
-        if missing_features:
-            print(f"Warning: Numerical features to scale missing from DataFrame: {missing_features}. They will be ignored for fitting scaler.")
-
-        if not existing_features_to_scale:
-            print("Error: No numerical features found to fit the scaler. Creating scaled columns with NaNs.")
-            for feature in features_to_scale:
-                df[feature + '_scaled'] = np.nan
-            return df, [f + '_scaled' for f in features_to_scale]
-
-        # Fill NaNs ONLY in the columns that will be used for fitting and transforming
-        df_to_scale = df[existing_features_to_scale].fillna(0).copy() 
-        
+        # Fill NaNs with 0 for fitting the scaler. Consider mean/median if more appropriate.
+        df_to_scale = df[final_numerical_cols_to_scale].fillna(0).copy()
         scaler.fit(df_to_scale)
         with open(scaler_path, 'wb') as f:
             pickle.dump(scaler, f)
         print(f"Scaler saved to {scaler_path}")
         
-        # Transform the same columns that were fitted
-        scaled_values = scaler.transform(df_to_scale)
+        scaled_values = scaler.transform(df_to_scale) # Transform the same NaN-filled data
         # Assign back to new columns in the original DataFrame
-        for i, feature_name in enumerate(existing_features_to_scale):
+        for i, feature_name in enumerate(final_numerical_cols_to_scale):
             df[feature_name + '_scaled'] = scaled_values[:, i]
-        
-        # For features that were originally requested but missing, create _scaled columns with NaN
-        for feature_name in missing_features:
-             df[feature_name + '_scaled'] = np.nan
 
     elif mode == 'test':
         if not os.path.exists(scaler_path):
@@ -392,371 +560,246 @@ def scale_numerical_features(df, features_to_scale, scaler_path, mode='train'):
             scaler = pickle.load(f)
         print(f"Loaded scaler from {scaler_path}")
 
-        # In test mode, scaler.feature_names_in_ might tell us what it was trained on
-        # We need to ensure the columns passed to transform match those
-        # For simplicity, assume features_to_scale are the ones to use and they should exist
-        # or have been handled by preprocessing if some are optional
-        
-        existing_features_to_transform = [f for f in features_to_scale if f in df.columns]
-        # Create a DataFrame with the same columns the scaler was fit on, in the correct order.
-        # scaler.feature_names_in_ holds the names from the fit stage.
-        if not hasattr(scaler, 'feature_names_in_'):
-             print("Warning: Scaler does not have feature_names_in_. Cannot guarantee column order for transform if features_to_scale is different from training.")
-             # Fallback: use existing_features_to_transform, hoping order matches.
-             # This could be risky if the set of columns in test data is different from train in an unexpected way.
-             df_to_transform = df[existing_features_to_transform].fillna(0).copy()
-             if df_to_transform.shape[1] != scaler.n_features_in_:
-                 raise ValueError(f"Test data has {df_to_transform.shape[1]} features, but scaler was fit on {scaler.n_features_in_} features. Columns to transform: {existing_features_to_transform}")
+        # Prepare DataFrame for transform, ensuring columns match scaler's expectations
+        expected_features_from_scaler = getattr(scaler, 'feature_names_in_', None) or getattr(scaler, 'n_features_in_', None)
+        if expected_features_from_scaler is None:
+             print("Warning: Scaler does not have feature_names_in_ or n_features_in_. Cannot guarantee column order/count for transform.")
+             # Fallback: use final_numerical_cols_to_scale, hoping it matches.
+             df_to_transform = df[final_numerical_cols_to_scale].fillna(0).copy()
+             if hasattr(scaler, 'n_features_in_') and df_to_transform.shape[1] != scaler.n_features_in_:
+                 raise ValueError(f"Test data has {df_to_transform.shape[1]} features, but scaler was fit on {scaler.n_features_in_} features. Columns: {final_numerical_cols_to_scale}")
         else:
-            expected_features = scaler.feature_names_in_
-            df_to_transform = pd.DataFrame(columns=expected_features, index=df.index)
-            for feature in expected_features:
-                if feature in df.columns:
-                    df_to_transform[feature] = df[feature]
-                else:
-                    print(f"Warning (test mode): Expected feature '{feature}' for scaler not found in test DataFrame. Filling with 0 for transform.")
-                    df_to_transform[feature] = 0 # Fill with 0 or handle as error
+            if isinstance(expected_features_from_scaler, int): # If only n_features_in_ is available
+                if len(final_numerical_cols_to_scale) != expected_features_from_scaler:
+                    raise ValueError(f"Test data provides {len(final_numerical_cols_to_scale)} numerical features, but scaler expects {expected_features_from_scaler}.")
+                # Assume final_numerical_cols_to_scale is in correct order
+                df_to_transform = df[final_numerical_cols_to_scale].fillna(0).copy()
+            else: # feature_names_in_ is available (list of names)
+                df_to_transform = pd.DataFrame(columns=expected_features_from_scaler, index=df.index)
+                for feature in expected_features_from_scaler:
+                    if feature in df.columns:
+                        df_to_transform[feature] = df[feature]
+                    else:
+                        print(f"Warning (test mode): Expected feature '{feature}' for scaler not found in test DataFrame. Filling with 0 for transform.")
+                        df_to_transform[feature] = 0 
             df_to_transform = df_to_transform.fillna(0)
 
         scaled_values = scaler.transform(df_to_transform)
 
-        # Assign back based on the order of expected_features (which should match scaler.feature_names_in_)
-        # or existing_features_to_transform if feature_names_in_ was not available.
-        cols_used_for_assignment = list(expected_features) if hasattr(scaler, 'feature_names_in_') else existing_features_to_transform
-        for i, feature_name in enumerate(cols_used_for_assignment):
-            if feature_name in features_to_scale: # Only create _scaled for originally requested ones
+        # Assign back based on the order of columns used for transform
+        cols_for_assignment = list(df_to_transform.columns)
+        for i, feature_name in enumerate(cols_for_assignment):
+            # Only create _scaled for originally intended columns (final_numerical_cols_to_scale)
+            if feature_name in final_numerical_cols_to_scale: 
                  df[feature_name + '_scaled'] = scaled_values[:, i]
         
-        # For any features in features_to_scale not covered (e.g. if not in scaler.feature_names_in_ but expected), fill with NaN
-        for feature_name in features_to_scale:
+        # Ensure all expected scaled columns are present, even if with NaNs if source was missing from scaler
+        for feature_name in final_numerical_cols_to_scale:
             if feature_name + '_scaled' not in df.columns:
+                print(f"Warning: Scaled column {feature_name + '_scaled'} was not created during test mode. Adding as NaN.")
                 df[feature_name + '_scaled'] = np.nan
     else:
         raise ValueError(f"Invalid mode: {mode}. Choose 'train' or 'test'.")
 
     # Print stats for verification
-    for feature_name_orig in features_to_scale:
+    for feature_name_orig in final_numerical_cols_to_scale:
         scaled_col_name = feature_name_orig + '_scaled'
         if scaled_col_name in df.columns:
             print(f"  Stats for '{scaled_col_name}': Min={df[scaled_col_name].min():.4f}, Max={df[scaled_col_name].max():.4f}, Mean={df[scaled_col_name].mean():.4f}, NaNs={df[scaled_col_name].isna().sum()}")
         else:
-            print(f"  Scaled column '{scaled_col_name}' was not created (possibly due to missing original feature).")
+            print(f"  Scaled column '{scaled_col_name}' was not created (possibly due to missing original feature '{feature_name_orig}').")
             
+    print(f"Numerical processing complete. {len(scaled_feature_names_result)} scaled features generated.")
     return df, scaled_feature_names_result
 
-def fetch_coingecko_price_at_timestamp(maya_asset_symbol, timestamp_seconds, retries=3, delay=5):
+def generate_sequences_and_targets_generative(df_processed, seq_length, feature_columns_ordered):
     """
-    Fetches the historical price of a Maya asset from CoinGecko for a given timestamp.
-    maya_asset_symbol: e.g., 'ETH.ETH', 'BTC.BTC'
-    timestamp_seconds: Unix timestamp in seconds.
-    Returns: Price in USD, or None if not found or error.
+    Generates sequences and their corresponding targets for the generative model.
+    The target for a sequence is the full feature vector of the next transaction.
     """
-    coingecko_asset_id = MAYA_TO_COINGECKO_MAP.get(maya_asset_symbol)
-    if not coingecko_asset_id:
-        print(f"DEBUG_COINGECKO: No CoinGecko ID mapping for Maya asset {maya_asset_symbol}")
-        return None
-
-    # # --- TEMPORARY DIAGNOSTIC: Skip thorchain --- 
-    # if coingecko_asset_id == 'thorchain':
-    #     print(f"DEBUG_COINGECKO_SKIP: Temporarily skipping API call for {coingecko_asset_id} ({maya_asset_symbol})")
-    #     return None
-    # # --- END TEMPORARY DIAGNOSTIC ---
-
-    timestamp_in_seconds_cg = timestamp_seconds # Default if not needing conversion
-    try:
-        # Assuming timestamp_seconds might be in nanoseconds, try converting
-        if timestamp_seconds > 10**12: # Heuristic: if it's a very large number, assume ns
-            timestamp_in_seconds_cg = timestamp_seconds / 10**9
-        
-        date_obj = datetime.fromtimestamp(timestamp_in_seconds_cg)
-        date_str = date_obj.strftime('%d-%m-%Y')
-    except Exception as e:
-        # print(f"DEBUG_COINGECKO: Error converting timestamp {timestamp_seconds} (raw) or {timestamp_in_seconds_cg} (converted) for {maya_asset_symbol}: {e}") # Silenced this specific error
-        return None
-
-    for attempt in range(retries):
-        try:
-            print(f"DEBUG_COINGECKO_LOOP: Attempt {attempt+1} for {coingecko_asset_id} on {date_str}")
-            print(f"DEBUG_COINGECKO_PRE_CALL: Calling get_coin_history_by_id for {coingecko_asset_id} on {date_str}")
-            historical_data = CG_CLIENT.get_coin_history_by_id(id=coingecko_asset_id, date=date_str, localization='false')
-            print(f"DEBUG_COINGECKO_POST_CALL: Received response for {coingecko_asset_id}. Type: {type(historical_data)}. Data (first 100 chars): {str(historical_data)[:100]}")
-            
-            if (historical_data and 
-                'market_data' in historical_data and 
-                'current_price' in historical_data['market_data'] and 
-                'usd' in historical_data['market_data']['current_price']):
-                price_usd = historical_data['market_data']['current_price']['usd']
-                print(f"DEBUG_COINGECKO: Found price for {coingecko_asset_id} ({maya_asset_symbol}) on {date_str}: ${price_usd}")
-                if price_usd is None or price_usd <= 0:
-                    print(f"DEBUG_COINGECKO: Price for {coingecko_asset_id} is null or zero: {price_usd}. Returning None.")
-                    return None
-                return float(price_usd)
-            else:
-                print(f"DEBUG_COINGECKO: Price data not found in expected format for {coingecko_asset_id} on {date_str}. Response: {historical_data}")
-                if isinstance(historical_data, dict) and historical_data.get('status', {}).get('error_code') == 429:
-                     print(f"DEBUG_COINGECKO: Rate limited. Waiting {delay * (attempt + 1)}s before retry...")
-                     time.sleep(delay * (attempt + 1))
-                elif attempt < retries - 1:
-                    print(f"DEBUG_COINGECKO: Retrying after {delay}s...")
-                    time.sleep(delay)
-                else:
-                    return None                    
-        except Exception as e:
-            print(f"DEBUG_COINGECKO: Error fetching price for {coingecko_asset_id} ({maya_asset_symbol}) on {date_str} (attempt {attempt+1}): {e}")
-            if attempt < retries - 1:
-                time.sleep(delay * (attempt + 1))
-    else:
-                return None
-    return None
-
-def generate_targets(processed_df, actor_type_map):
-    print("Starting target generation...")
-    num_transactions = len(processed_df)
+    print(f"Generating sequences of length {seq_length} for generative model...")
+    X_sequences_list, Y_targets_list = [], []
     
-    # Target p: Actor type of the NEXT transaction
-    # One-hot encoded: [ARB_SWAP, USER_SWAP, NON_SWAP, UNK_ACTOR]
-    num_actor_classes_p = len(actor_type_map)
-    processed_df['target_p'] = [list(np.zeros(num_actor_classes_p, dtype=int)) for _ in range(num_transactions)]
+    df_for_sequencing = df_processed[feature_columns_ordered].copy()
     
-    # Target mu: Profitability of the NEXT transaction IF it's an ARB_SWAP
-    # Profit = P_m(next_tx) - P_u(next_tx_in_asset_vs_USD)
-    # This is a single float value, not one-hot. It's only valid if next tx is ARB_SWAP.
-    processed_df['target_mu_profit'] = np.nan 
-
-    arb_swap_id = actor_type_map.get('ARB_SWAP')
-    if arb_swap_id is None: # Should not happen with static map
-        raise ValueError("ARB_SWAP not found in actor_type_map during target generation.")
-
-    for i in range(num_transactions - 1): # Iterate up to the second to last transaction
-        current_tx_id_debug = processed_df.at[i, 'transaction_id']
-        next_tx_actor_type_id = processed_df.at[i + 1, 'actor_type_id']
-        next_tx_id_debug = processed_df.at[i+1, 'transaction_id']
-
-        # --- P_target (actor type of next transaction) ---
-        p_vector = np.zeros(num_actor_classes_p, dtype=int)
-        if 0 <= next_tx_actor_type_id < num_actor_classes_p:
-            p_vector[next_tx_actor_type_id] = 1
-        else: # Should not happen if actor_type_id is mapped correctly
-            p_vector[actor_type_map.get('UNK_ACTOR')] = 1 
-        processed_df.at[i, 'target_p'] = list(p_vector)
-
-        # --- Mu_target (profit of next transaction if it's an ARB_SWAP) ---
-        if next_tx_actor_type_id == arb_swap_id:
-            # Profit = P_m(next_tx) - P_u(next_tx_in_asset_vs_USD) for the *next* transaction
-            # P_m(next_tx) is out_amount/in_amount for the *next* transaction's swap
-            # P_u(next_tx) is CoinGecko price of *next* transaction's *in_asset* in USD
-            
-            # These are already pre-calculated and stored on the *next* row (i+1)
-            p_m_next = processed_df.at[i + 1, 'maya_price_P_m']
-            p_u_in_next = processed_df.at[i + 1, 'coingecko_price_P_u'] 
-            p_u_out_next = processed_df.at[i + 1, 'coingecko_price_P_u_out_asset']
-
-            # Add a threshold for p_m_next to avoid division by very small numbers or instability
-            MIN_PM_THRESHOLD = 1e-9 
-
-            if not pd.isna(p_m_next) and not pd.isna(p_u_in_next) and not pd.isna(p_u_out_next):
-                # Ensure all components for the ratio are positive
-                if p_u_in_next > 0 and p_m_next > MIN_PM_THRESHOLD and p_u_out_next > 0:
-                    # Ratio = External_USD_Price_of_IN_Asset / Maya_Implied_USD_Price_of_IN_Asset
-                    # Maya_Implied_USD_Price_of_IN_Asset = (1 / p_m_next) * p_u_out_next
-                    # Ratio = p_u_in_next / ( (1 / p_m_next) * p_u_out_next )
-                    # Ratio = (p_u_in_next * p_m_next) / p_u_out_next
-                    
-                    ratio_val = (p_u_in_next * p_m_next) / p_u_out_next
-                    
-                    if ratio_val > 0: # Argument of log must be positive
-                        log_ratio_profit = np.log(ratio_val)
-                        processed_df.at[i, 'target_mu_profit'] = log_ratio_profit
-                        # print(f"DEBUG_LOG_RATIO_PROFIT (TX {current_tx_id_debug} for next {next_tx_id_debug}): "
-                        #       f"p_u_in_next: {p_u_in_next:.4f}, p_m_next: {p_m_next:.4f}, p_u_out_next: {p_u_out_next:.4f}, "
-                        #       f"Ratio: {ratio_val:.4f}, LogRatio: {log_ratio_profit:.4f}")
-                    else:
-                        processed_df.at[i, 'target_mu_profit'] = np.nan # Ratio non-positive, log undefined
-                        # print(f"DEBUG_LOG_RATIO_PROFIT_SKIPPED_NON_POSITIVE_RATIO (TX {current_tx_id_debug} for next {next_tx_id_debug}): Ratio ({ratio_val}) non-positive.")
-                else:
-                    processed_df.at[i, 'target_mu_profit'] = np.nan # One of the price components is not positive
-                    # print(f"DEBUG_LOG_RATIO_PROFIT_SKIPPED_NON_POSITIVE_PRICE (TX {current_tx_id_debug} for next {next_tx_id_debug}): "
-                    #       f"p_u_in_next: {p_u_in_next}, p_m_next: {p_m_next}, p_u_out_next: {p_u_out_next}")
-            # else: (This case means one of the base prices was NaN already)
-                # target_mu_profit remains NaN by default
-                # print(f"DEBUG_LOG_RATIO_PROFIT_SKIPPED_NAN_PRICE (TX {current_tx_id_debug} for next {next_tx_id_debug})")
-
-    # For the last transaction, target_p is 'UNK_ACTOR' and target_mu is NaN
-    if num_transactions > 0:
-        p_vector_last = np.zeros(num_actor_classes_p, dtype=int)
-        p_vector_last[actor_type_map.get('UNK_ACTOR')] = 1
-        processed_df.at[num_transactions - 1, 'target_p'] = list(p_vector_last)
-
-    print("Target generation completed (using log-ratio).")
-    print("Stats for target_mu_profit (log-ratio):")
-    print(processed_df['target_mu_profit'].describe())
-
-    # REMOVED CLIPPING LOGIC as log-transform should stabilize the scale
-    # if not processed_df['target_mu_profit'].isnull().all():
-    #     lower_bound = processed_df['target_mu_profit'].quantile(0.05)
-    #     upper_bound = processed_df['target_mu_profit'].quantile(0.95)
-    #     print(f"Clipping target_mu_profit to range (5th-95th pctl): [{lower_bound:.4f}, {upper_bound:.4f}]")
-    #     processed_df['target_mu_profit'] = processed_df['target_mu_profit'].clip(lower=lower_bound, upper=upper_bound)
-    #     print("Stats for target_mu_profit AFTER clipping:")
-    #     print(processed_df['target_mu_profit'].describe())
-    # else:
-    #     print("target_mu_profit is all NaN, skipping clipping.")
-
-    return processed_df
-
-def generate_sequences_separated(df, cat_id_feature_cols, num_feature_cols, target_p_col, target_mu_col, seq_length):
-    print(f"Generating separated sequences of length {seq_length}...")
-    X_cat_ids_list, X_num_list, y_p_targets_list, y_mu_targets_list = [], [], [], []
-    num_samples = len(df) - seq_length
+    num_samples = len(df_for_sequencing) - seq_length
 
     if num_samples < 0:
-        print(f"Warning: Not enough data ({len(df)} rows) to create sequences of length {seq_length}. Returning empty lists.")
-        return np.array(X_cat_ids_list), np.array(X_num_list), np.array(y_p_targets_list), np.array(y_mu_targets_list)
+        print(f"Warning: Not enough data ({len(df_for_sequencing)} rows) to create sequences of length {seq_length}. Returning empty arrays.")
+        return np.array([]), np.array([])
 
     for i in range(num_samples):
-        sequence_end_idx = i + seq_length - 1
-        # target_idx = i + seq_length # Not directly used for selecting target data here, targets are from sequence_end_idx
-
-        X_cat_seq_df = df.iloc[i:i + seq_length][cat_id_feature_cols]
-        X_num_seq_df = df.iloc[i:i + seq_length][num_feature_cols]
+        X_seq = df_for_sequencing.iloc[i : i + seq_length].values
+        Y_target_vec = df_for_sequencing.iloc[i + seq_length].values
         
-        X_cat_ids_list.append(X_cat_seq_df.values.astype(np.int32)) # Ensure integer type for IDs
-        X_num_list.append(X_num_seq_df.values.astype(np.float32))
-        
-        y_p_targets_list.append(df.at[sequence_end_idx, target_p_col])
-        y_mu_targets_list.append(df.at[sequence_end_idx, target_mu_col])
+        X_sequences_list.append(X_seq)
+        Y_targets_list.append(Y_target_vec)
 
-    print(f"Generated {len(X_cat_ids_list)} sequences.")
-    return np.array(X_cat_ids_list), np.array(X_num_list), np.array(y_p_targets_list), np.array(y_mu_targets_list)
+    X_sequences = np.array(X_sequences_list, dtype=np.float32)
+    Y_targets = np.array(Y_targets_list, dtype=np.float32)
+    
+    print(f"Generated {len(X_sequences)} sequences.")
+    print(f"X_sequences shape: {X_sequences.shape if X_sequences.size > 0 else 'empty'}")
+    print(f"Y_targets shape: {Y_targets.shape if Y_targets.size > 0 else 'empty'}")
+    return X_sequences, Y_targets
 
 def main(args):
-    print(f"--- Starting Data Preprocessing for AI Model (Mode: {args.mode}) ---")
+    print(f"--- Starting Data Preprocessing for GENERATIVE Model (Mode: {args.mode}) ---")
 
     # --- Path Setup ---
-    input_csv_path = os.path.join(args.data_dir, args.input_csv)
-    output_npz_path = os.path.join(args.processed_data_dir, args.output_npz)
-    scaler_path = os.path.join(args.artifacts_dir, args.scaler_filename)
-    mappings_dir = args.artifacts_dir # Mappings will be saved here
-    model_config_path = os.path.join(args.artifacts_dir, args.model_config_filename)
-    cg_price_cache_path = os.path.join(args.processed_data_dir, DEFAULT_CG_PRICE_CACHE_FILENAME)
+    input_json_path = os.path.join(args.data_dir, args.input_json)
+    output_npz_path = os.path.join(args.processed_data_dir_generative, args.output_npz_generative)
+    
+    artifacts_dir = args.artifacts_dir_generative
+    os.makedirs(artifacts_dir, exist_ok=True)
 
-    # Ensure directories exist
-    os.makedirs(args.processed_data_dir, exist_ok=True)
-    os.makedirs(args.artifacts_dir, exist_ok=True)
+    scaler_path = os.path.join(artifacts_dir, args.scaler_filename_generative)
+    model_config_path = os.path.join(artifacts_dir, args.model_config_filename_generative)
+    
+    os.makedirs(args.processed_data_dir_generative, exist_ok=True)
 
     if args.mode == 'train':
         if os.path.exists(output_npz_path):
             print(f"Removing old {output_npz_path} (train mode)")
             os.remove(output_npz_path)
-        # In train mode, we might also remove old scaler/mappings if a full retrain is implied
-        # For now, get_or_create_mapping and scale_numerical_features handle overwrite/creation logic
+
+    raw_actions_list = load_and_parse_raw_json(input_json_path)
+    if not raw_actions_list:
+        print("No actions loaded. Exiting.")
+        return
+
+    # Placeholder for the main new preprocessing function
+    df_flattened, ordered_raw_feature_names_temp = preprocess_actions_for_generative_model(
+        raw_actions_list, 
+        artifacts_dir,
+        args.mode
+    )
     
-    print(f"Loading data from: {input_csv_path}")
-    raw_df = pd.read_csv(input_csv_path)
-    print(f"Loaded {len(raw_df)} transactions from {input_csv_path}.")
+    if df_flattened.empty:
+        print("Preprocessing (flattening) returned an empty DataFrame. Cannot proceed.")
+        return
+        
+    # For this intermediate step, the placeholder_feature_columns will be the ordered_raw_feature_names_temp
+    # In the final version, this will be the list of *fully processed* (ID-mapped, hashed, scaled) feature names.
+    placeholder_feature_columns_for_sequence_test = ordered_raw_feature_names_temp
+    
+    # --- TEMPORARY: Convert all selected raw columns to numeric for sequence generation test ---
+    # This is a HACK. Real processing will create dedicated numerical columns.
+    df_for_seq_test = df_flattened[placeholder_feature_columns_for_sequence_test].copy()
+    for col in placeholder_feature_columns_for_sequence_test:
+        # Attempt to convert to numeric, coercing errors. Then fill NaNs with 0.
+        # This is very crude and only for testing the sequence generation flow.
+        df_for_seq_test[col] = pd.to_numeric(df_for_seq_test[col], errors='coerce').fillna(0)
+    # --- END TEMPORARY HACK ---
 
-    # Initial feature selection and basic normalization
-    raw_df = raw_df[SELECTED_FEATURES].copy()
-    df_normalized = normalize_amounts(raw_df.copy()) # Pass a copy
+    if not placeholder_feature_columns_for_sequence_test:
+        print("No features columns determined from flattening. Exiting.")
+        return
 
-    # Feature engineering (P_m, P_u, actor type, etc.)
-    df_features = preprocess_features(df_normalized.copy(), cg_price_cache_path, mappings_dir) # Pass a copy and paths
+    # ---> NEW: Call categorical processing function here
+    df_categoricals_processed, processed_cat_col_names, all_mappings = process_categorical_features_generative(
+        df_flattened, 
+        artifacts_dir,
+        args.mode
+    )
+    # For now, sequence generation test will still use the HACKED raw numeric columns.
+    # Later, processed_cat_col_names will be combined with processed_num_col_names.
+    # And df_categoricals_processed will be passed to numerical processing.
 
-    # Map categorical features to IDs
-    # The asset_mapping is returned to help build model_config later
-    df_mapped, categorical_id_feature_columns, asset_mapping_loaded = map_categorical_features(df_features.copy(), mappings_dir, args.mode)
-
-    # Scale numerical features
-    df_scaled, numerical_feature_columns_scaled = scale_numerical_features(
-        df_mapped.copy(), 
-        NUMERICAL_FEATURES_TO_SCALE, 
-        scaler_path, 
+    # ---> NEW: Call numerical processing function here
+    df_numericals_processed, processed_num_col_names_scaled = process_numerical_features_generative(
+        df_categoricals_processed, # Pass the DataFrame that has categorical features processed
+        scaler_path, # Pass the scaler path defined in main()
         args.mode
     )
 
-    # Generate targets (p_target for actor type, mu_target for profit)
-    actor_type_map_for_targets = get_or_create_actor_type_mapping(os.path.join(mappings_dir, DEFAULT_ACTOR_TYPE_MAPPING_FILENAME))
-    df_targets = generate_targets(df_scaled.copy(), actor_type_map_for_targets)
+    # ---> NEW: Combine all processed feature names for sequence generation
+    # The order here MATTERS and must be consistent for training and inference.
+    # Suggestion: categorical_ids, then hashed_ids, then binary_flags, then scaled_numericals.
+    # processed_cat_col_names already contains ID-mapped, hashed, and flags in some order.
+    # We need a defined final order based on schema for reproducibility.
+    
+    # For now, simple concatenation for testing, actual order should be based on schema.
+    # This is still a placeholder for the true final ordered list of all features.
+    final_ordered_feature_columns = processed_cat_col_names + processed_num_col_names_scaled
+    if not final_ordered_feature_columns:
+        print("No features available after categorical and numerical processing. Exiting.")
+        return
+    
+    # Ensure all columns in final_ordered_feature_columns exist in df_numericals_processed
+    # Fill any completely missing ones with 0s or NaNs (e.g. if a feature was never present in data)
+    for col_final in final_ordered_feature_columns:
+        if col_final not in df_numericals_processed.columns:
+            print(f"Warning: Final expected feature '{col_final}' not in DataFrame. Adding as zeros.")
+            df_numericals_processed[col_final] = 0 # Or np.nan, then fill before .values
+            
+    # Replace the old placeholder_feature_columns_for_sequence_test
+    # HACK: Remove the old placeholder logic used for sequence testing
+    # if not placeholder_feature_columns_for_sequence_test:
+    #     print("No features columns determined from flattening. Exiting.")
 
-    print(f"Number of categorical ID feature columns for sequence: {len(categorical_id_feature_columns)}")
-    print(f"Categorical ID feature columns: {categorical_id_feature_columns}")
-    print(f"Number of numerical feature columns for sequence: {len(numerical_feature_columns_scaled)}")
-    print(f"Numerical feature columns: {numerical_feature_columns_scaled}")
-
-    # Generate sequences
-    X_cat_ids_sequences, X_num_sequences, y_p_targets, y_mu_targets = generate_sequences_separated(
-        df_targets, 
-        categorical_id_feature_columns, 
-        numerical_feature_columns_scaled, 
-        'target_p', 
-        'target_mu_profit', 
-        SEQUENCE_LENGTH
+    # 3. Generate Sequences and Targets
+    #    Y_targets will be the full feature vector of the *next* transaction
+    X_sequences, Y_targets = generate_sequences_and_targets_generative(
+        df_numericals_processed, # Use the DataFrame that has all features processed
+        SEQUENCE_LENGTH,
+        final_ordered_feature_columns # This MUST be the final ordered list of all features
     )
 
-    print(f"Generated {len(X_cat_ids_sequences)} sequences.")
-    print(f"X_cat_ids_sequences shape: {X_cat_ids_sequences.shape}")
-    print(f"X_num_sequences shape: {X_num_sequences.shape}")
-    print(f"y_p_targets shape: {y_p_targets.shape}")
-    print(f"y_mu_targets shape: {y_mu_targets.shape}")
-
-    np.savez_compressed(
-        output_npz_path,
-        X_cat_ids_sequences=X_cat_ids_sequences,
-        X_num_sequences=X_num_sequences,
-        y_p_targets=y_p_targets,
-        y_mu_targets=y_mu_targets,
-        categorical_feature_columns=categorical_id_feature_columns, # Save for reference
-        numerical_feature_columns=numerical_feature_columns_scaled # Save for reference
-    )
-    print(f"Sequences and targets saved to {output_npz_path}")
+    if X_sequences.size == 0 or Y_targets.size == 0:
+        print("Sequence generation resulted in empty arrays. Nothing to save.")
+    else:
+        np.savez_compressed(
+            output_npz_path,
+            X_sequences=X_sequences,
+            Y_targets=Y_targets,
+            feature_columns_ordered=final_ordered_feature_columns # Save final ordered list
+        )
+        print(f"Sequences and targets saved to {output_npz_path}")
 
     if args.mode == 'train':
-        print(f"Saving model configuration to {model_config_path}")
-        model_config = {
-            'categorical_embedding_details': {},
-            'num_numerical_features': len(numerical_feature_columns_scaled),
+        print(f"Saving generative model configuration to {model_config_path}")
+        model_config_generative = {
             'sequence_length': SEQUENCE_LENGTH,
-            # Add other model architecture params if they become dynamic
-            'p_target_classes': y_p_targets.shape[1] # Number of classes for p_target
+            'num_features_total': len(final_ordered_feature_columns), # From actual processed features
+            'feature_columns_ordered': final_ordered_feature_columns, # Actual ordered list
+            'categorical_id_mapping_details': all_mappings, # Use the actual mappings
+            'hashed_feature_details': { # Populate based on schema and HASH_VOCAB_SIZES
+                'in_address_hash_id': HASH_VOCAB_SIZE_ADDRESS +1, # +1 to include PAD_ID
+                'out_address_hash_id': HASH_VOCAB_SIZE_ADDRESS +1,
+                'meta_swap_affiliate_address_hash_id': HASH_VOCAB_SIZE_AFFILIATE_ADDRESS +1
+            },
+            'scaler_path': scaler_path, # Path to the saved scaler
+            'pad_token_str': PAD_TOKEN_STR,
+            'unknown_token_str': UNKNOWN_TOKEN_STR,
+            'no_asset_str': NO_ASSET_STR
         }
-        # Get vocab sizes from mappings
-        # Asset mapping is already loaded as asset_mapping_loaded
-        model_config['categorical_embedding_details'][DEFAULT_ASSET_MAPPING_FILENAME] = len(asset_mapping_loaded)
-        
-        other_mappings_configs = {
-            "status": DEFAULT_STATUS_MAPPING_FILENAME,
-            "type": DEFAULT_TYPE_MAPPING_FILENAME,
-            "actor_type_id": DEFAULT_ACTOR_TYPE_MAPPING_FILENAME # actor_type_id_mapped uses this
-        }
-        for map_key, map_file_name in other_mappings_configs.items():
-            map_path = os.path.join(mappings_dir, map_file_name)
-            with open(map_path, 'r') as f_map:
-                loaded_map = json.load(f_map)
-            model_config['categorical_embedding_details'][map_file_name] = len(loaded_map)
 
         with open(model_config_path, 'w') as f_config:
-            json.dump(model_config, f_config, indent=4)
-        print("Model configuration saved.")
+            json.dump(model_config_generative, f_config, indent=4)
+        print("Generative model configuration saved (placeholder content).")
 
-    print(f"--- Preprocessing and sequence generation complete (Mode: {args.mode}). ---")
+    print(f"--- Generative Preprocessing complete (Mode: {args.mode}). ---")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Preprocess Maya Protocol transaction data for AI model.")
+    parser = argparse.ArgumentParser(description="Preprocess transaction data for Generative AI model.")
     parser.add_argument("--mode", type=str, default="train", choices=["train", "test"],
                         help="Mode of operation: 'train' to learn and save artifacts, 'test' to load pre-learned artifacts.")
     parser.add_argument("--data-dir", type=str, default=DEFAULT_DATA_DIR,
-                        help="Directory containing the input CSV file.")
-    parser.add_argument("--input-csv", type=str, default=DEFAULT_INPUT_CSV,
-                        help="Name of the input CSV file (e.g., training_transactions.csv).")
-    parser.add_argument("--processed-data-dir", type=str, default=DEFAULT_PROCESSED_DATA_DIR,
-                        help="Directory to save output .npz file and CoinGecko cache.")
-    parser.add_argument("--output-npz", type=str, default=DEFAULT_OUTPUT_NPZ,
-                        help="Name of the output .npz file (e.g., training_sequences.npz).")
-    parser.add_argument("--artifacts-dir", type=str, default=DEFAULT_PROCESSED_DATA_DIR, # Default to processed_data_dir for simplicity
-                        help="Directory to save/load scaler, mappings, and model_config.json.")
-    # Specific artifact names can be overridden if needed, but keeping them fixed for now
-    parser.add_argument("--scaler-filename", type=str, default=DEFAULT_SCALER_FILENAME, help="Scaler filename.")
-    parser.add_argument("--model-config-filename", type=str, default=DEFAULT_MODEL_CONFIG_FILENAME, help="Model config filename.")
+                        help="Directory containing the input JSON file.")
+    parser.add_argument("--input-json", type=str, default=DEFAULT_INPUT_JSON,
+                        help="Name of the input JSON file (e.g., transactions_data.json).")
+    
+    parser.add_argument("--processed-data-dir-generative", type=str, default=DEFAULT_PROCESSED_DATA_DIR_GENERATIVE,
+                        help="Base directory to save output .npz file for generative model.")
+    parser.add_argument("--output-npz-generative", type=str, default=DEFAULT_OUTPUT_NPZ_GENERATIVE,
+                        help="Name of the output .npz file for generative model (e.g., sequences_generative_thorchain.npz).")
+    
+    parser.add_argument("--artifacts-dir-generative", type=str, default=os.path.join(DEFAULT_PROCESSED_DATA_DIR_GENERATIVE, "thorchain_artifacts_v1"),
+                        help="Directory to save/load generative model artifacts (scaler, mappings, model_config_generative.json).")
+    
+    parser.add_argument("--scaler-filename-generative", type=str, default=DEFAULT_SCALER_FILENAME_GENERATIVE)
+    parser.add_argument("--model-config-filename-generative", type=str, default=DEFAULT_MODEL_CONFIG_FILENAME_GENERATIVE)
 
     cli_args = parser.parse_args()
     main(cli_args) 

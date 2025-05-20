@@ -19,166 +19,237 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe[:, :x.size(1), :]
         return self.dropout(x)
 
-class ArbitragePredictionModel(nn.Module):
+class GenerativeTransactionModel(nn.Module):
     def __init__(self, 
-                 # Vocabulary sizes for embeddings
-                 asset_vocab_size, 
-                 type_vocab_size, 
-                 status_vocab_size,
-                 actor_type_vocab_size, # For actor_type_id_mapped
-                 # Embedding dimensions
-                 asset_embed_dim, 
-                 type_embed_dim, 
-                 status_embed_dim,
-                 actor_type_embed_dim,
-                 # Numerical features
-                 num_numerical_features, # Number of scaled numerical features
-                 # Transformer parameters
-                 d_model=256, nhead=8, num_encoder_layers=6, dim_feedforward=1024,
-                 # Output heads
-                 p_target_classes=4, # ARB_SWAP, USER_SWAP, NON_SWAP, UNK_ACTOR
-                 mu_target_dim=1,    # Single float value for profit
-                 dropout=0.1, max_seq_len=10):
-        super(ArbitragePredictionModel, self).__init__()
+                 model_config: dict, 
+                 embedding_dim_config: dict, 
+                 d_model=256, 
+                 nhead=8, 
+                 num_encoder_layers=6, 
+                 dim_feedforward=1024,
+                 dropout=0.1, 
+                 max_seq_len=10):
+        super(GenerativeTransactionModel, self).__init__()
 
         self.d_model = d_model
         self.max_seq_len = max_seq_len
+        self.model_config = model_config
+        self.embedding_dim_config = embedding_dim_config
 
-        # Embedding layers
-        self.in_asset_embed = nn.Embedding(asset_vocab_size, asset_embed_dim)
-        self.out_asset_embed = nn.Embedding(asset_vocab_size, asset_embed_dim)
-        self.fee_asset_embed = nn.Embedding(asset_vocab_size, asset_embed_dim) # for swap_network_fee_asset_mapped
-        self.type_embed = nn.Embedding(type_vocab_size, type_embed_dim)
-        self.status_embed = nn.Embedding(status_vocab_size, status_embed_dim)
-        self.actor_type_embed = nn.Embedding(actor_type_vocab_size, actor_type_embed_dim) # for actor_type_id_mapped
-
-        total_embedded_dim = (asset_embed_dim * 3) + type_embed_dim + status_embed_dim + actor_type_embed_dim
+        self.feature_columns_ordered = model_config['feature_columns_ordered']
+        # self.num_features_total = model_config['num_features_total'] # This will be the number of *input* features, not output dimension
         
-        # Linear layer to project concatenated features (all embedded categoricals + numericals) to d_model
-        self.input_projection = nn.Linear(total_embedded_dim + num_numerical_features, d_model)
+        self.embedders = nn.ModuleDict()
+        # feature_info stores info about INPUT features for embedding and concatenation
+        self.feature_info_input = [] 
+        current_concat_dim_for_input_projection = 0
 
+        default_cat_embed_dim = embedding_dim_config.get('default_cat_embed_dim', 16)
+        asset_embed_dim = embedding_dim_config.get('asset_embed_dim', default_cat_embed_dim)
+        hash_embed_dim = embedding_dim_config.get('hash_embed_dim', default_cat_embed_dim)
+
+        # For calculating total output dimension and storing output slice info
+        self.total_output_dimension = 0
+        self.feature_output_info = [] # List of dicts: {'name', 'type', 'original_input_index', 'output_start_idx', 'output_end_idx', 'vocab_size' (if cat)}
+
+        for idx, feature_name in enumerate(self.feature_columns_ordered):
+            input_info = {'name': feature_name, 'index': idx}
+            output_info_current_feature = {'name': feature_name, 'original_input_index': idx, 'output_start_idx': self.total_output_dimension}
+            
+            feature_type_determined = ""
+            vocab_size = 0 # For categoricals
+
+            if feature_name.endswith('_id') and not feature_name.endswith('_hash_id'): 
+                input_info['type'] = 'id_cat'
+                feature_type_determined = 'id_cat'
+                current_vocab_size = None
+                
+                # New matching logic for vocab size from model_config['categorical_id_mapping_details']
+                # This part needs to correctly associate feature_name (e.g., 'action_status_id', 'pool1_asset_id')
+                # with the correct mapping dictionary stored in model_config['categorical_id_mapping_details']
+                # and then take its length for the vocab size.
+                
+                target_feature_base = feature_name.replace('_id', '') # e.g., "action_status", "pool1_asset", "in_coin1_asset"
+
+                if 'asset' in target_feature_base: 
+                    # All asset-related features use the single 'asset_to_id_...json' mapping
+                    asset_map_file_key = next((k for k in model_config['categorical_id_mapping_details'] if 'asset_to_id' in k), None)
+                    if asset_map_file_key and asset_map_file_key in model_config['categorical_id_mapping_details']:
+                        current_vocab_size = len(model_config['categorical_id_mapping_details'][asset_map_file_key])
+                    else:
+                        raise ValueError(f"Asset mapping file key not found or invalid in model_config for feature: {feature_name}")
+                else:
+                    # For non-asset IDs like 'action_status_id', 'in_memo_status_id', 'meta_swap_memo_status_id'
+                    # The goal is to find the corresponding map, e.g., 'status_to_id_...', 'memo_status_to_id_...'
+                    # target_feature_base examples: "action_status", "in_memo_status", "meta_swap_memo_status"
+                    
+                    # Extract the core part, e.g., "status" from "action_status", or "memo_status" from "in_memo_status"
+                    # This is a bit heuristic; relies on consistent naming from preprocessing.
+                    core_name_parts = target_feature_base.split('_')
+                    if "memo" in core_name_parts and "status" in core_name_parts:
+                        search_key_prefix = "memo_status"
+                    elif "status" in core_name_parts:
+                        search_key_prefix = "status"
+                    elif "type" in core_name_parts: # for action_type_id
+                        search_key_prefix = "type"
+                    # Add other specific non-asset ID types if necessary, e.g. 'refund_reason'
+                    else: 
+                        # Fallback or raise error if pattern not recognized
+                        search_key_prefix = core_name_parts[-1] # Takes 'status' from 'action_status', 'type' from 'action_type'
+
+                    found_map_key = None
+                    for map_key in model_config['categorical_id_mapping_details']:
+                        if map_key.startswith(search_key_prefix + '_to_id'):
+                            found_map_key = map_key
+                            break
+                    
+                    if found_map_key and found_map_key in model_config['categorical_id_mapping_details']:
+                        current_vocab_size = len(model_config['categorical_id_mapping_details'][found_map_key])
+                    else:
+                        # If a direct match like 'status_to_id' failed for 'action_status_id',
+                        # and it's not an asset, this indicates an issue.
+                        pass # current_vocab_size remains None, will be caught by the check below
+
+                if current_vocab_size is None:
+                    raise ValueError(f"Could not determine vocab size for ID feature: {feature_name}. target_feature_base: {target_feature_base}")
+                
+                vocab_size = current_vocab_size
+                embed_dim = asset_embed_dim if 'asset' in feature_name else default_cat_embed_dim
+                embed_key = f"embed_input_{feature_name}" # Distinguish from potential output embeddings if ever needed
+                self.embedders[embed_key] = nn.Embedding(vocab_size, embed_dim)
+                input_info['embed_key'] = embed_key
+                current_concat_dim_for_input_projection += embed_dim
+                self.total_output_dimension += vocab_size # Categorical features output logits for each class
+                output_info_current_feature['vocab_size'] = vocab_size
+
+            elif feature_name.endswith('_hash_id'): 
+                input_info['type'] = 'hash_cat'
+                feature_type_determined = 'hash_cat'
+                current_vocab_size = model_config['hashed_feature_details'].get(feature_name)
+                if current_vocab_size is None: raise ValueError(f"Could not determine vocab size for hashed feature: {feature_name}")
+                
+                vocab_size = current_vocab_size
+                embed_key = f"embed_input_{feature_name}"
+                self.embedders[embed_key] = nn.Embedding(vocab_size, hash_embed_dim)
+                input_info['embed_key'] = embed_key
+                current_concat_dim_for_input_projection += hash_embed_dim
+                self.total_output_dimension += vocab_size # Hashed features also output logits for each class hash bucket
+                output_info_current_feature['vocab_size'] = vocab_size
+            
+            elif feature_name.endswith('_flag') or feature_name.endswith('_present_flag'):
+                input_info['type'] = 'binary'
+                feature_type_determined = 'binary'
+                current_concat_dim_for_input_projection += 1 
+                self.total_output_dimension += 1 # Binary flags output a single logit
+
+            elif feature_name.endswith('_scaled'): 
+                input_info['type'] = 'numerical'
+                feature_type_determined = 'numerical'
+                current_concat_dim_for_input_projection += 1 
+                self.total_output_dimension += 1 # Numericals output a single value
+            else:
+                raise ValueError(f"Unknown feature type for {feature_name} based on suffix.")
+            
+            self.feature_info_input.append(input_info)
+            output_info_current_feature['type'] = feature_type_determined
+            output_info_current_feature['output_end_idx'] = self.total_output_dimension
+            self.feature_output_info.append(output_info_current_feature)
+
+        self.input_projection = nn.Linear(current_concat_dim_for_input_projection, d_model)
         self.pos_encoder = PositionalEncoding(d_model, self.max_seq_len, dropout=dropout)
-
         encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, 
                                                    dim_feedforward=dim_feedforward, dropout=dropout, batch_first=True)
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_encoder_layers)
 
-        # Output heads
-        self.p_head = nn.Linear(d_model, p_target_classes) # Predicts 4 classes for actor type
-        self.mu_head = nn.Linear(d_model, mu_target_dim)   # Predicts 1 float for profit
+        print(f"DEBUG: Total calculated output dimension for model: {self.total_output_dimension}")
+        self.output_projection = nn.Linear(d_model, self.total_output_dimension)
 
-        # Define the expected order and number of categorical (IDs) and numerical features
-        # These indices must correspond to how X_sequences are constructed in preprocess_ai_data.py
-        # when it saves mapped IDs instead of one-hot encoded features.
-        # Example:
-        self.categorical_feature_keys = [
-            'status_mapped', 
-            'type_mapped', 
-            'in_asset_mapped', 
-            'out_asset_mapped', 
-            'swap_network_fee_asset_mapped',
-            'actor_type_id_mapped' # This is the actor type of the current transaction in sequence
-        ]
-        # num_numerical_features will be passed, e.g., 7 (for the 7 scaled numericals)
-        
-        # Store embedders in a dictionary for easier access in forward pass
-        self.embedders = {
-            'status_mapped': self.status_embed,
-            'type_mapped': self.type_embed,
-            'in_asset_mapped': self.in_asset_embed,
-            'out_asset_mapped': self.out_asset_embed,
-            'swap_network_fee_asset_mapped': self.fee_asset_embed,
-            'actor_type_id_mapped': self.actor_type_embed
-        }
-        self.num_categorical_ids = len(self.categorical_feature_keys)
+    def forward(self, x_sequence):
+        # x_sequence shape: (batch_size, seq_len, num_input_features_ordered)
+        batch_size, seq_len, _ = x_sequence.shape
+        processed_features_for_input_concat = []
 
-    def forward(self, x_cat_ids, x_num):
-        # x_cat_ids shape: (batch_size, seq_len, num_categorical_id_features)
-        # x_num shape: (batch_size, seq_len, num_numerical_features)
-        
-        all_embeddings = []
-        for i in range(self.num_categorical_ids):
-            key = self.categorical_feature_keys[i]
-            embedder = self.embedders[key]
-            all_embeddings.append(embedder(x_cat_ids[:, :, i]))
-            
-        concatenated_cat_embeds = torch.cat(all_embeddings, dim=-1)
-        
-        combined_features = torch.cat([concatenated_cat_embeds, x_num], dim=-1)
+        for info in self.feature_info_input:
+            feature_idx = info['index']
+            feature_slice = x_sequence[:, :, feature_idx] 
 
-        projected_input = self.input_projection(combined_features)
+            if info['type'] == 'id_cat' or info['type'] == 'hash_cat':
+                embedded_slice = self.embedders[info['embed_key']](feature_slice.long())
+                processed_features_for_input_concat.append(embedded_slice)
+            elif info['type'] == 'binary' or info['type'] == 'numerical':
+                processed_features_for_input_concat.append(feature_slice.float().unsqueeze(-1))
         
+        concatenated_input_features = torch.cat(processed_features_for_input_concat, dim=-1)
+        
+        projected_input = self.input_projection(concatenated_input_features)
         encoded_input = self.pos_encoder(projected_input)
-
         transformer_output = self.transformer_encoder(encoded_input)
         
-        last_step_output = transformer_output[:, -1, :]
+        last_step_output = transformer_output[:, -1, :] 
+        predicted_full_output_vector = self.output_projection(last_step_output) 
 
-        p_logits = self.p_head(last_step_output)
-        mu_predictions = self.mu_head(last_step_output)
+        return predicted_full_output_vector # Shape: (batch_size, self.total_output_dimension)
 
-        return p_logits, mu_predictions
 
+# Example Usage (main block will need significant update for generative model)
 if __name__ == '__main__':
-    # Example Usage (for testing the model structure)
-    batch_size = 4
-    seq_len = 10 # M from requirements
+    print("--- GenerativeTransactionModel Example Usage (Conceptual - Revised Output) ---")
     
-    # These should come from the actual data properties after preprocessing
-    asset_vocab = 50  # Example: Max ID for any asset + 1
-    type_vocab = 5    # Example
-    status_vocab = 4  # Example
-    actor_type_vocab = 4 # ARB_SWAP, USER_SWAP, NON_SWAP, UNK_ACTOR
-    
-    asset_dim = 32
-    type_dim = 10
-    status_dim = 8
-    actor_type_dim = 10
+    dummy_feature_columns = [
+        'action_status_id', 'pool1_asset_id', 'in_address_hash_id', 
+        'in_tx_id_present_flag', 'action_date_unix_scaled'
+    ]
+    # num_total_feats_input = len(dummy_feature_columns) # Input features
 
-    num_numerical_feats = 8 # Updated: was 7, now 8 based on preprocess_ai_data.py output
-                            # in_amount_norm, out_amount_norm, swap_liquidity_fee_norm, 
-                            # swap_slip_bps, swap_network_fee_amount_norm, 
-                            # maya_price_P_m, coingecko_price_P_u, coingecko_price_P_u_out_asset
+    dummy_model_config = {
+        'feature_columns_ordered': dummy_feature_columns,
+        'num_features_total': len(dummy_feature_columns), # Number of features in the input sequence from preprocessing
+        'categorical_id_mapping_details': {
+            'status_to_id_generative_thorchain.json': 5, 
+            'asset_to_id_generative_thorchain.json': 150 
+        },
+        'hashed_feature_details': {
+            'in_address_hash_id': 20001 
+        },
+        'sequence_length': 10
+    }
 
-    model = ArbitragePredictionModel(
-        asset_vocab_size=asset_vocab, asset_embed_dim=asset_dim,
-        type_vocab_size=type_vocab, type_embed_dim=type_dim,
-        status_vocab_size=status_vocab, status_embed_dim=status_dim,
-        actor_type_vocab_size=actor_type_vocab, actor_type_embed_dim=actor_type_dim,
-        num_numerical_features=num_numerical_feats,
-        d_model=256, nhead=4, num_encoder_layers=3, dim_feedforward=512, # Smaller example
-        p_target_classes=actor_type_vocab, # Should match actor_type_vocab_size for p_head
-        mu_target_dim=1,
-        dropout=0.1, max_seq_len=seq_len
+    dummy_embedding_config = {
+        'default_cat_embed_dim': 10,
+        'asset_embed_dim': 16,
+        'hash_embed_dim': 12
+    }
+
+    generative_model = GenerativeTransactionModel(
+        model_config=dummy_model_config,
+        embedding_dim_config=dummy_embedding_config,
+        d_model=64, nhead=2, num_encoder_layers=1, dim_feedforward=128, # Smaller example
+        max_seq_len=dummy_model_config['sequence_length']
     )
 
-    # Create dummy input tensors
-    # x_cat_ids: (batch_size, seq_len, num_categorical_id_features)
-    # num_categorical_id_features = 6 
-    # (status, type, in_asset, out_asset, fee_asset, actor_type_of_current_tx)
-    dummy_x_cat_ids = torch.randint(0, status_vocab, (batch_size, seq_len, model.num_categorical_ids)) 
-    # Correcting asset ID ranges for dummy data more carefully:
-    dummy_x_cat_ids[:,:,2] = torch.randint(0, asset_vocab, (batch_size, seq_len)) # in_asset
-    dummy_x_cat_ids[:,:,3] = torch.randint(0, asset_vocab, (batch_size, seq_len)) # out_asset
-    dummy_x_cat_ids[:,:,4] = torch.randint(0, asset_vocab, (batch_size, seq_len)) # fee_asset
-    dummy_x_cat_ids[:,:,0] = torch.randint(0, status_vocab, (batch_size, seq_len)) # status
-    dummy_x_cat_ids[:,:,1] = torch.randint(0, type_vocab, (batch_size, seq_len))   # type
-    dummy_x_cat_ids[:,:,5] = torch.randint(0, actor_type_vocab, (batch_size, seq_len)) # actor_type_id_mapped (of current tx)
+    batch_s = 4
+    seq_l = dummy_model_config['sequence_length']
+    num_input_features = dummy_model_config['num_features_total']
+    dummy_x_sequence = torch.rand(batch_s, seq_l, num_input_features) 
+    dummy_x_sequence[:, :, 0] = torch.randint(0, 5, (batch_s, seq_l)).float()    # action_status_id (vocab 5)
+    dummy_x_sequence[:, :, 1] = torch.randint(0, 150, (batch_s, seq_l)).float() # pool1_asset_id (vocab 150)
+    dummy_x_sequence[:, :, 2] = torch.randint(0, 20001, (batch_s, seq_l)).float()# in_address_hash_id (vocab 20001)
+    dummy_x_sequence[:, :, 3] = torch.randint(0, 2, (batch_s, seq_l)).float()    # in_tx_id_present_flag (binary)
+    # action_date_unix_scaled (numerical) remains random float
+
+    print(f"Dummy input x_sequence shape: {dummy_x_sequence.shape}")
+    predicted_vector = generative_model(dummy_x_sequence)
+    # Expected output dimension: 5 (status) + 150 (asset) + 20001 (hash) + 1 (flag) + 1 (numerical) = 20158
+    print(f"Predicted vector shape: {predicted_vector.shape}") 
+    print(f"Expected output dimension (calculated by model): {generative_model.total_output_dimension}")
+    
+    # For debugging, print feature_output_info
+    # print("\nFeature Output Info from Model:")
+    # for info in generative_model.feature_output_info:
+    #     print(info)
+
+    print("Model Instantiation and Forward Pass Example Completed (Revised Output).")
 
 
-    dummy_x_num = torch.rand(batch_size, seq_len, num_numerical_feats)
-
-    print(f"Dummy x_cat_ids shape: {dummy_x_cat_ids.shape}")
-    print(f"Dummy x_num shape: {dummy_x_num.shape}")
-
-    # Forward pass
-    p_logits_output, mu_preds_output = model(dummy_x_cat_ids, dummy_x_num)
-
-    print(f"p_logits output shape: {p_logits_output.shape}")   # Expected: (batch_size, actor_type_vocab)
-    print(f"mu_preds output shape: {mu_preds_output.shape}") # Expected: (batch_size, 1)
-
-    # Test Positional Encoding standalone
-    pe_test = PositionalEncoding(d_model=256, max_len=10, dropout=0.1)
-    test_tensor = torch.rand(batch_size, seq_len, 256)
-    pe_out = pe_test(test_tensor)
-    print(f"PositionalEncoding output shape: {pe_out.shape}") 
+# Remove or comment out the old ArbitragePredictionModel class if no longer needed.
+# class ArbitragePredictionModel(nn.Module): ... 

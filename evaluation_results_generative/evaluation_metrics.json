@@ -1,0 +1,172 @@
+{
+    "action_status_id": {
+        "accuracy": 0.9867167919799499,
+        "f1_weighted": 0.9867551965014526
+    },
+    "action_type_id": {
+        "accuracy": 0.9766917293233083,
+        "f1_weighted": 0.9760014737180345
+    },
+    "in_memo_status_id": {
+        "accuracy": 1.0,
+        "f1_weighted": 1.0
+    },
+    "meta_swap_memo_status_id": {
+        "accuracy": 0.9857142857142858,
+        "f1_weighted": 0.9857150326394617
+    },
+    "pool1_asset_id": {
+        "accuracy": 0.8611528822055138,
+        "f1_weighted": 0.857767804860328
+    },
+    "pool2_asset_id": {
+        "accuracy": 0.9473684210526315,
+        "f1_weighted": 0.9439662042387987
+    },
+    "in_coin1_asset_id": {
+        "accuracy": 0.843859649122807,
+        "f1_weighted": 0.8308987668398339
+    },
+    "out_coin1_asset_id": {
+        "accuracy": 0.8832080200501253,
+        "f1_weighted": 0.8766362107553347
+    },
+    "meta_swap_networkFee1_asset_id": {
+        "accuracy": 0.9909774436090225,
+        "f1_weighted": 0.9901816484192264
+    },
+    "meta_swap_target_asset_id": {
+        "accuracy": 1.0,
+        "f1_weighted": 1.0
+    },
+    "in_address_hash_id": {
+        "accuracy": 0.8721804511278195,
+        "f1_weighted": 0.866776438567479
+    },
+    "out_address_hash_id": {
+        "accuracy": 0.9390977443609022,
+        "f1_weighted": 0.9337028599410327
+    },
+    "meta_swap_affiliate_address_hash_id": {
+        "accuracy": 0.9954887218045113,
+        "f1_weighted": 0.9945741908537431
+    },
+    "in_address_present_flag": {
+        "accuracy": 1.0,
+        "f1": 1.0
+    },
+    "in_coin1_present_flag": {
+        "accuracy": 0.9979949874686717,
+        "f1": 0.9989947222920331
+    },
+    "in_tx_id_present_flag": {
+        "accuracy": 1.0,
+        "f1": 1.0
+    },
+    "meta_is_addLiquidity_flag": {
+        "accuracy": 1.0,
+        "f1": 0.0
+    },
+    "meta_is_refund_flag": {
+        "accuracy": 0.9771929824561404,
+        "f1": 0.9669211195928753
+    },
+    "meta_is_swap_flag": {
+        "accuracy": 0.9852130325814537,
+        "f1": 0.987669801462905
+    },
+    "meta_is_thorname_flag": {
+        "accuracy": 0.9979949874686717,
+        "f1": 0.0
+    },
+    "meta_is_withdraw_flag": {
+        "accuracy": 1.0,
+        "f1": 0.0
+    },
+    "meta_swap_affiliate_address_present_flag": {
+        "accuracy": 0.9979949874686717,
+        "f1": 0.9512195121951219
+    },
+    "meta_swap_is_streaming_flag": {
+        "accuracy": 0.9969924812030075,
+        "f1": 0.925
+    },
+    "out_address_present_flag": {
+        "accuracy": 0.987719298245614,
+        "f1": 0.991374757965147
+    },
+    "out_coin1_present_flag": {
+        "accuracy": 0.9887218045112782,
+        "f1": 0.992053681794102
+    },
+    "out_tx_id_present_flag": {
+        "accuracy": 0.9819548872180451,
+        "f1": 0.9816232771822359
+    },
+    "action_date_unix_scaled": {
+        "mse": 0.016699356958270073,
+        "mae": 0.09445039182901382
+    },
+    "action_height_val_scaled": {
+        "mse": 0.016955088824033737,
+        "mae": 0.0962194949388504
+    },
+    "in_coin1_amount_norm_scaled": {
+        "mse": 0.2970138192176819,
+        "mae": 0.20590399205684662
+    },
+    "out_coin1_amount_norm_scaled": {
+        "mse": 0.3403119742870331,
+        "mae": 0.16397324204444885
+    },
+    "meta_swap_liquidityFee_norm_scaled": {
+        "mse": 0.5381333231925964,
+        "mae": 0.1330057978630066
+    },
+    "meta_swap_networkFee1_amount_norm_scaled": {
+        "mse": 0.5726973414421082,
+        "mae": 0.08272992819547653
+    },
+    "meta_swap_affiliateFee_norm_scaled": {
+        "mse": 0.06809569895267487,
+        "mae": 0.09432899206876755
+    },
+    "meta_swap_streaming_quantity_norm_scaled": {
+        "mse": 0.0009660315699875355,
+        "mae": 0.024664394557476044
+    },
+    "meta_withdraw_imp_loss_protection_norm_scaled": {
+        "mse": 0.0008949693874455988,
+        "mae": 0.02355680987238884
+    },
+    "meta_swap_swapSlip_bps_val_scaled": {
+        "mse": 0.09851738065481186,
+        "mae": 0.18790020048618317
+    },
+    "meta_swap_streaming_count_val_scaled": {
+        "mse": 0.001090570236556232,
+        "mae": 0.025964144617319107
+    },
+    "meta_addLiquidity_units_val_scaled": {
+        "mse": 0.0012161434860900044,
+        "mae": 0.026905203238129616
+    },
+    "meta_withdraw_units_val_scaled": {
+        "mse": 0.0011457297950983047,
+        "mae": 0.02581424079835415
+    },
+    "meta_withdraw_basis_points_val_scaled": {
+        "mse": 0.0010191419860348105,
+        "mae": 0.02476166933774948
+    },
+    "meta_withdraw_asymmetry_val_scaled": {
+        "mse": 0.0008599149878136814,
+        "mae": 0.022738544270396233
+    },
+    "_overall_test_loss": 0.13273625075817108,
+    "_loss_components": {
+        "categorical_loss": 0.24118073284626007,
+        "numerical_loss": 0.13037444651126862,
+        "flag_loss": 0.02701694890856743
+    }
+}
