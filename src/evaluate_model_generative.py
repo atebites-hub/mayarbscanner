@@ -68,7 +68,14 @@ def main(args):
     print(f"Using device: {device}")
 
     # --- 4. Instantiate Model ---
-    embedding_config_for_model = json.loads(args.embedding_dim_config_json) 
+    # Prioritize embedding_dim_config from the loaded model_config (if saved by train_model.py)
+    if 'embedding_dim_config_used' in model_config_from_preprocessor:
+        embedding_config_for_model = model_config_from_preprocessor['embedding_dim_config_used']
+        print(f"Using embedding_dim_config_used from loaded model_config: {embedding_config_for_model}")
+    else:
+        embedding_config_for_model = json.loads(args.embedding_dim_config_json)
+        print(f"Using embedding_dim_config_json from args (fallback): {embedding_config_for_model}")
+        
     model = GenerativeTransactionModel(
         model_config=model_config_from_preprocessor,
         embedding_dim_config=embedding_config_for_model,
@@ -133,7 +140,7 @@ def main(args):
         
         print(f"\nFeature: {feat_name} (Type: {feat_type})")
         
-        if feat_type == 'id_cat' or feat_type == 'hash_cat':
+        if feat_type == 'id_map' or feat_type == 'hash_cat':
             pred_ids = np.argmax(pred_slice_all, axis=1)
             target_ids = target_slice_all.astype(int)
             
@@ -164,7 +171,7 @@ def main(args):
                 cm = confusion_matrix(target_ids, pred_ids, labels=labels_for_cm)
                 plot_confusion_matrix_func(cm, class_names=class_names, title=f'CM for {feat_name}', output_path=cm_path)
 
-        elif feat_type == 'binary':
+        elif feat_type == 'binary_flag':
             pred_binary = (pred_slice_all.squeeze(axis=-1) > 0).astype(int) if pred_slice_all.ndim > 1 else (pred_slice_all > 0).astype(int)
             target_binary = target_slice_all.astype(int)
             
@@ -173,7 +180,7 @@ def main(args):
             print(f"  Accuracy: {accuracy:.4f}, F1: {f1:.4f}")
             results[feat_name] = {'accuracy': accuracy, 'f1': f1}
 
-        elif feat_type == 'numerical':
+        elif feat_type == 'numerical_scaled':
             pred_values = pred_slice_all.squeeze(axis=-1) if pred_slice_all.ndim > 1 else pred_slice_all
             target_values = target_slice_all 
             
@@ -218,6 +225,79 @@ def main(args):
     except Exception as e:
         print(f"Error calculating overall test loss: {e}")
 
+    # --- 10. Calculate Weighted Accuracy (Optional) ---
+    if args.feature_weights_json:
+        try:
+            with open(args.feature_weights_json, 'r') as f_weights:
+                feature_weights = json.load(f_weights)
+            print(f"\nLoaded feature weights from {args.feature_weights_json}")
+
+            weighted_performance_sum = 0.0
+            total_weights_applied = 0.0
+            num_features_in_weighted_score = 0
+            weighted_performance_details = {}
+            
+            default_weight = feature_weights.get("default_weight", 1.0)
+
+            for feat_info in feature_output_info_list:
+                feat_name = feat_info['name']
+                feat_type = feat_info['type'] # Get feature type
+                
+                current_metric_value = 0.0
+                metric_type_for_weighting = ""
+
+                if feat_type == 'id_map' or feat_type == 'hash_cat' or feat_type == 'binary_flag':
+                    if feat_name in results and 'accuracy' in results[feat_name]:
+                        current_metric_value = results[feat_name]['accuracy']
+                        metric_type_for_weighting = "accuracy"
+                    else:
+                        continue # Skip if accuracy not available for this cat/bin feature
+                elif feat_type == 'numerical_scaled':
+                    if feat_name in results and 'mae' in results[feat_name]:
+                        mae = results[feat_name]['mae']
+                        current_metric_value = 1.0 / (1.0 + mae) # Transform MAE to 0-1 scale (higher is better)
+                        metric_type_for_weighting = "1/(1+mae)"
+                    else:
+                        continue # Skip if MAE not available for this numerical feature
+                else:
+                    continue # Skip unknown feature types
+
+                weight = feature_weights.get(feat_name, default_weight)
+                
+                weighted_performance_sum += current_metric_value * weight
+                total_weights_applied += weight
+                num_features_in_weighted_score += 1
+                weighted_performance_details[feat_name] = {
+                    'original_metric_value': results[feat_name].get('accuracy', results[feat_name].get('mae')),
+                    'metric_type_used': metric_type_for_weighting,
+                    'transformed_score_for_weighting': current_metric_value,
+                    'applied_weight': weight
+                }
+
+            if total_weights_applied > 0:
+                overall_weighted_performance_score = weighted_performance_sum / total_weights_applied
+                print(f"--- Overall Weighted Performance Score (All Feature Types) ---")
+                print(f"  Weighted Performance Score: {overall_weighted_performance_score:.4f}")
+                print(f"  (Calculated over {num_features_in_weighted_score} features using weights from {args.feature_weights_json})")
+                results['_overall_weighted_performance_score'] = overall_weighted_performance_score
+                results['_weighted_performance_details'] = weighted_performance_details
+            else:
+                print("  No applicable features found or zero total weight for weighted performance score calculation.")
+                results['_overall_weighted_performance_score'] = None
+                results['_weighted_performance_details'] = {}
+            
+            # Re-save results with weighted score
+            with open(results_path, 'w') as f:
+                json.dump(results, f, indent=4)
+                print(f"Evaluation metrics (including weighted performance score) re-saved to {results_path}")
+
+        except FileNotFoundError:
+            print(f"\nWarning: Feature weights JSON file not found at {args.feature_weights_json}. Skipping weighted performance score.")
+        except json.JSONDecodeError:
+            print(f"\nWarning: Error decoding feature weights JSON from {args.feature_weights_json}. Skipping weighted performance score.")
+        except Exception as e:
+            print(f"\nAn unexpected error occurred during weighted performance score calculation: {e}. Skipping.")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate Generative Transaction Prediction Model.")
     
@@ -239,6 +319,8 @@ if __name__ == "__main__":
     parser.add_argument("--num_encoder_layers", type=int, default=train_model.DEFAULT_NUM_ENCODER_LAYERS)
     parser.add_argument("--dim_feedforward", type=int, default=train_model.DEFAULT_DIM_FEEDFORWARD)
     parser.add_argument("--dropout", type=float, default=train_model.DEFAULT_DROPOUT)
+    parser.add_argument("--feature-weights-json", type=str, default=None,
+                        help="Optional path to a JSON file containing feature weights for weighted performance score calculation.")
 
     cli_args = parser.parse_args()
     main(cli_args) 

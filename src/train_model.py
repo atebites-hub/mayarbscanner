@@ -38,7 +38,7 @@ DEFAULT_EMBEDDING_DIM_CONFIG = {
 # Transformer Model parameters (can also be part of a more detailed model architecture config if needed)
 DEFAULT_D_MODEL = 256
 DEFAULT_NHEAD = 8
-DEFAULT_NUM_ENCODER_LAYERS = 4
+DEFAULT_NUM_ENCODER_LAYERS = 6
 DEFAULT_DIM_FEEDFORWARD = 1024 # Typically 2x to 4x d_model
 DEFAULT_DROPOUT = 0.1
 
@@ -94,21 +94,21 @@ def calculate_composite_loss(predictions, targets, feature_output_info_list, dev
         feat_type = feat_info['type']
         loss = torch.tensor(0.0, device=device)
 
-        if feat_type == 'id_cat' or feat_type == 'hash_cat':
+        if feat_type == 'id_map' or feat_type == 'hash_cat':
             # pred_slice is (batch_size, vocab_size_for_this_feature)
             # target_slice is (batch_size,) and needs to be long type for CE
             loss = ce_loss_fn(pred_slice, target_slice.long())
             loss_components['categorical_loss'] += loss.item() # Store item for aggregation
             num_cat_feats += 1
         
-        elif feat_type == 'binary':
+        elif feat_type == 'binary_flag':
             # pred_slice is (batch_size, 1) for binary logits
             # target_slice is (batch_size,)
             loss = bce_loss_fn(pred_slice.squeeze(-1), target_slice.float())
             loss_components['flag_loss'] += loss.item()
             num_flag_feats += 1
         
-        elif feat_type == 'numerical':
+        elif feat_type == 'numerical_scaled':
             # pred_slice is (batch_size, 1) for numerical predictions
             # target_slice is (batch_size,)
             loss = mse_loss_fn(pred_slice.squeeze(-1), target_slice.float())
@@ -138,19 +138,21 @@ def main(args):
     # --- 1. Load Model Configuration from Preprocessing ---
     # The model_config_path will point to e.g. data/processed_ai_data_generative_test/thorchain_artifacts_v1/model_config_generative_thorchain.json
     print(f"Loading generative model configuration from {args.generative_model_config_path}...")
-    try:
-        with open(args.generative_model_config_path, 'r') as f_config:
-            model_config_from_preprocessor = json.load(f_config)
-    except FileNotFoundError:
-        print(f"Error: Generative model configuration file not found at {args.generative_model_config_path}.")
-        return
-    except json.JSONDecodeError:
-        print(f"Error: Could not decode JSON from {args.generative_model_config_path}.")
-        return
+    with open(args.generative_model_config_path, 'r') as f_config:
+        model_config_from_preprocessor = json.load(f_config)
 
-    # Extract necessary info from model_config_from_preprocessor
-    # sequence_length = model_config_from_preprocessor.get('sequence_length') # Model takes this from its own config
-    # num_features_total = model_config_from_preprocessor.get('num_features_total') # Model takes this
+    # --- Load all_id_mappings from its separate file ---
+    all_mappings_filename = "all_id_mappings_generative_mayachain_s25.json" # Must match what preprocess saved
+    artifacts_dir = os.path.dirname(args.generative_model_config_path) # Infer artifacts_dir
+    all_mappings_path = os.path.join(artifacts_dir, all_mappings_filename)
+    all_id_mappings_loaded = {}
+    try:
+        with open(all_mappings_path, 'r') as f_map_load:
+            all_id_mappings_loaded = json.load(f_map_load)
+        print(f"Successfully loaded all_id_mappings from {all_mappings_path}")
+    except Exception as e_map_load:
+        print(f"ERROR loading all_id_mappings from {all_mappings_path}: {e_map_load}. This may cause issues.")
+    # --- End separate load ---
 
     # --- 2. Load Training Data (Generative Format) ---
     # The input_npz_generative path will point to e.g. data/processed_ai_data_generative_test/sequences_and_targets_generative_thorchain.npz
@@ -209,6 +211,45 @@ def main(args):
         max_seq_len=model_config_from_preprocessor.get('sequence_length', 10) # Get from config
     ).to(device)
     print("GenerativeTransactionModel instantiated and moved to device.")
+
+    # --- Calculate and Print Model Parameters ---
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Total model parameters: {total_params:,}")
+    print(f"Trainable model parameters: {trainable_params:,}")
+
+    # --- Add model.feature_output_info to the config and re-save it ---
+    # This makes the model's output structure available for inference/decoding scripts.
+    if hasattr(model, 'feature_output_info') and model.feature_output_info:
+        model_config_from_preprocessor['feature_output_info_model'] = model.feature_output_info
+        # Also save other model-specific parameters that were used for instantiation
+        model_config_from_preprocessor['d_model'] = args.d_model
+        model_config_from_preprocessor['nhead'] = args.nhead
+        model_config_from_preprocessor['num_encoder_layers'] = args.num_encoder_layers
+        model_config_from_preprocessor['dim_feedforward'] = args.dim_feedforward
+        model_config_from_preprocessor['dropout'] = args.dropout
+        model_config_from_preprocessor['embedding_dim_config_used'] = embedding_config_for_model
+        # sequence_length is already in the config from preprocessing
+
+        # --- Define a new path for the augmented config ---
+        base_dir = os.path.dirname(args.generative_model_config_path)
+        original_filename = os.path.basename(args.generative_model_config_path)
+        name, ext = os.path.splitext(original_filename)
+        augmented_config_filename = f"{name}_AUGMENTED{ext}"
+        augmented_config_path = os.path.join(base_dir, augmented_config_filename)
+
+        try:
+            print("DEBUG: Keys in model_config_from_preprocessor BEFORE saving:", list(model_config_from_preprocessor.keys()))
+            # print("DEBUG: Content of 'all_id_mappings' BEFORE saving (first 500 chars):", str(model_config_from_preprocessor.get('all_id_mappings'))[:500]) # This key is no longer present
+            print("DEBUG: Content of 'embedding_dim_config_used' BEFORE saving:", model_config_from_preprocessor.get('embedding_dim_config_used'))
+            
+            with open(augmented_config_path, 'w') as f_config_out: # Save to new path
+                json.dump(model_config_from_preprocessor, f_config_out, indent=4)
+            print(f"Updated and re-saved model configuration to {augmented_config_path} with model's feature_output_info.") # Log new path
+        except Exception as e:
+            print(f"Error re-saving model configuration: {e}. Inference scripts might have issues.")
+    else:
+        print("Warning: model.feature_output_info not found or empty. Model config not updated with it.")
 
     # --- 6. Define Loss Functions and Optimizer (Composite Loss will be a separate function) ---
     # The composite loss will be called inside the training loop.

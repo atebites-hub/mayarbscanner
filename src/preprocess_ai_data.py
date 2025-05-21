@@ -27,7 +27,7 @@ DEFAULT_STATUS_MAPPING_FILENAME_GENERATIVE = "status_to_id_generative_thorchain.
 DEFAULT_MEMO_STATUS_MAPPING_FILENAME_GENERATIVE = "memo_status_to_id_generative_thorchain.json"
 
 # Sequence length for model input
-SEQUENCE_LENGTH = 10
+SEQUENCE_LENGTH = 25
 
 # --- Feature Hashing Constants ---
 HASH_SEED = 42
@@ -355,18 +355,50 @@ def process_categorical_features_generative(df_input, artifacts_dir, mode='train
     Processes categorical features in the DataFrame by:
     1. Applying ID mapping to low/mid cardinality categoricals (e.g., type, status, assets).
     2. Applying feature hashing to high cardinality categoricals (e.g., addresses).
-    Returns the DataFrame with new processed feature columns and a list of these column names.
+    Returns the DataFrame, list of processed column names, all mappings, and feature configurations.
     """
     print(f"Processing categorical features for generative model. Mode: {mode}")
     df = df_input.copy()
     processed_categorical_column_names = []
     all_mappings_created = {}
+    feature_configs_categorical = {} # New: To store detailed feature configs
+
+    # --- Helper to define raw_json_paths (approximations for now) ---
+    # This should ideally be more systematically derived from preprocess_actions_for_generative_model
+    raw_json_paths_map = {
+        'action_status_raw': "['status']",
+        'action_type_raw': "['type']",
+        'in_memo_status_raw': "['in', 0, 'memo']", # Simplified, actual logic is more complex
+        'meta_swap_memo_status_raw': "['metadata', 'swap', 'memo']", # Simplified
+
+        'pool1_asset_raw': "['pools', 0]",
+        'pool2_asset_raw': "['pools', 1]",
+        'in_coin1_asset_raw': "['in', 0, 'coins', 0, 'asset']",
+        'out_coin1_asset_raw': "['out', 0, 'coins', 0, 'asset']",
+        'meta_swap_networkFee1_asset_raw': "['metadata', 'swap', 'networkFees', 0, 'asset']",
+        'meta_swap_target_asset_raw': "['metadata', 'swap', 'targetAsset']",
+
+        'in_address_raw': "['in', 0, 'address']",
+        'out_address_raw': "['out', 0, 'address']",
+        'meta_swap_affiliate_address_raw': "['metadata', 'swap', 'affiliateAddress']",
+
+        # For flags, path points to the field whose presence/value determines the flag
+        'in_tx_id_present_flag': "['in', 0, 'txID']",
+        'in_address_present_flag': "['in', 0, 'address']",
+        'in_coin1_present_flag': "['in', 0, 'coins', 0, 'asset']", # Based on coin presence
+        'out_tx_id_present_flag': "['out', 0, 'txID']",
+        'out_address_present_flag': "['out', 0, 'address']",
+        'out_coin1_present_flag': "['out', 0, 'coins', 0, 'asset']",
+        'meta_is_swap_flag': "action.type == 'swap'", # Logic based
+        'meta_is_addLiquidity_flag': "action.type == 'addLiquidity'",
+        'meta_is_withdraw_flag': "action.type == 'withdraw'",
+        'meta_is_refund_flag': "action.type == 'refund'",
+        'meta_is_thorname_flag': "action.type == 'setMAYAName' or action.type == 'setTHORName'", # Example
+        'meta_swap_affiliate_address_present_flag': "['metadata', 'swap', 'affiliateAddress']",
+        'meta_swap_is_streaming_flag': "['metadata', 'swap', 'streamingSwap']", # Based on presence of streamingSwap obj
+    }
 
     # --- 1. ID Mapping for Low/Mid Cardinality Categoricals ---
-    # Define features to ID map and their corresponding raw column and mapping file suffix
-    # The actual mapping filename will be like: args.dataset_name + mapping_file_suffix
-    # For now, using the global DEFAULT_*_MAPPING_FILENAME_GENERATIVE constants
-    
     id_map_configs = [
         {'raw_col': 'action_status_raw', 'id_col': 'action_status_id', 'map_file': DEFAULT_STATUS_MAPPING_FILENAME_GENERATIVE},
         {'raw_col': 'action_type_raw', 'id_col': 'action_type_id', 'map_file': DEFAULT_TYPE_MAPPING_FILENAME_GENERATIVE},
@@ -393,6 +425,13 @@ def process_categorical_features_generative(df_input, artifacts_dir, mode='train
         df[id_col] = df[raw_col].map(current_mapping).fillna(unknown_id).astype(int)
         processed_categorical_column_names.append(id_col)
         print(f"  ID Mapped '{raw_col}' to '{id_col}'. Unique IDs: {df[id_col].nunique()}")
+        feature_configs_categorical[id_col] = {
+            'type': 'id_map',
+            'raw_column_name': raw_col,
+            'raw_json_path': raw_json_paths_map.get(raw_col, "UNKNOWN_PATH"),
+            'mapping_file': map_file_name,
+            'vocab_size': len(current_mapping)
+        }
 
     # Special handling for ASSET ID mapping (consolidated)
     asset_raw_columns = [
@@ -430,6 +469,13 @@ def process_categorical_features_generative(df_input, artifacts_dir, mode='train
             df[id_col] = df[id_col].astype(int)
             processed_categorical_column_names.append(id_col)
             print(f"  ID Mapped Asset '{raw_col}' to '{id_col}'. Unique IDs: {df[id_col].nunique()}")
+            feature_configs_categorical[id_col] = {
+                'type': 'id_map', # Could be 'asset_id_map' for more specificity
+                'raw_column_name': raw_col,
+                'raw_json_path': raw_json_paths_map.get(raw_col, "UNKNOWN_ASSET_PATH"),
+                'mapping_file': DEFAULT_ASSET_MAPPING_FILENAME_GENERATIVE,
+                'vocab_size': len(asset_mapping)
+            }
         else:
             print(f"Warning: Asset raw column '{raw_col}' not found in DataFrame for ID mapping.")
 
@@ -455,16 +501,33 @@ def process_categorical_features_generative(df_input, artifacts_dir, mode='train
             df[hash_col] = df[raw_col].apply(hash_or_pad).astype(int)
             processed_categorical_column_names.append(hash_col)
             print(f"  Feature Hashed '{raw_col}' to '{hash_col}'. Vocab Size: {vocab_size}. Unique IDs: {df[hash_col].nunique()}")
+            feature_configs_categorical[hash_col] = {
+                'type': 'hash_cat',
+                'raw_column_name': raw_col,
+                'raw_json_path': raw_json_paths_map.get(raw_col, "UNKNOWN_HASH_PATH"),
+                'hash_seed': HASH_SEED,
+                'hash_bins': vocab_size, # This is the number of bins, not vocab_size+1
+                'pad_id': pad_id_val # The ID used for padding (typically HASH_VOCAB_SIZE_ADDRESS)
+            }
         else:
             print(f"Warning: Address raw column '{raw_col}' not found in DataFrame for hashing.")
 
     # --- 3. Collect Binary Flag Column Names (already created during flattening) ---
     binary_flag_columns = [col for col in df.columns if col.endswith('_flag') or col.endswith('_present_flag')]
-    processed_categorical_column_names.extend(binary_flag_columns)
-    print(f"  Collected {len(binary_flag_columns)} binary flag columns: {binary_flag_columns}")
+    for flag_col in binary_flag_columns:
+        if flag_col not in processed_categorical_column_names: # Avoid duplicates if somehow added before
+            processed_categorical_column_names.append(flag_col)
+            feature_configs_categorical[flag_col] = {
+                'type': 'binary_flag',
+                'raw_column_name': flag_col.replace('_present_flag', '_raw_presence_source').replace('_flag', '_raw_logic_source'), # Placeholder for source
+                'raw_json_path': raw_json_paths_map.get(flag_col, "UNKNOWN_FLAG_PATH_OR_LOGIC"),
+            }
+    # processed_categorical_column_names.extend(binary_flag_columns) # Old way
+    print(f"  Collected {len(binary_flag_columns)} binary flag columns and their configs.")
+
 
     print(f"Total processed categorical/flag columns: {len(processed_categorical_column_names)}")
-    return df, processed_categorical_column_names, all_mappings_created
+    return df, processed_categorical_column_names, all_mappings_created, feature_configs_categorical
 
 def process_numerical_features_generative(df_input, scaler_path, mode='train'):
     """
@@ -472,23 +535,45 @@ def process_numerical_features_generative(df_input, scaler_path, mode='train'):
     1. Converting raw string numericals (dates, amounts, fees, etc.) to numeric types.
     2. Normalizing amounts by 1e8 where applicable.
     3. Scaling all processed numerical features using StandardScaler.
-    Returns the DataFrame with new scaled numerical columns and a list of these column names.
+    Returns the DataFrame, list of scaled column names, and numerical feature configurations.
     """
     print(f"Processing numerical features for generative model. Mode: {mode}")
     df = df_input.copy()
-    processed_numerical_column_names = []
-    
+    processed_numerical_column_names = [] # These are intermediate names (before _scaled)
+    feature_configs_numerical = {} # New: To store detailed numerical feature configs
+
+    # --- Helper to define raw_json_paths for numericals ---
+    raw_json_paths_numerical_map = {
+        'action_date_raw': "['date']",
+        'action_height_raw': "['height']",
+        'in_coin1_amount_raw': "['in', 0, 'coins', 0, 'amount']",
+        'out_coin1_amount_raw': "['out', 0, 'coins', 0, 'amount']",
+        'meta_swap_liquidityFee_raw': "['metadata', 'swap', 'liquidityFee']",
+        'meta_swap_networkFee1_amount_raw': "['metadata', 'swap', 'networkFees', 0, 'amount']", # Assuming first networkFee
+        'meta_swap_affiliateFee_amount_raw': "['metadata', 'swap', 'affiliateFee']",
+        'meta_swap_streaming_quantity_raw': "['metadata', 'swap', 'streamingSwap', 'quantity']", # Path for streaming quantity
+        'meta_withdraw_imp_loss_protection_raw': "['metadata', 'withdraw', 'impermanentLossProtection']",
+        'meta_swap_swapSlip_bps_raw': "['metadata', 'swap', 'swapSlip']",
+        'meta_swap_streaming_count_raw': "['metadata', 'swap', 'streamingSwap', 'count']", # Path for streaming count
+        'meta_addLiquidity_units_raw': "['metadata', 'addLiquidity', 'liquidityUnits']",
+        'meta_withdraw_units_raw': "['metadata', 'withdraw', 'liquidityUnits']",
+        'meta_withdraw_basis_points_raw': "['metadata', 'withdraw', 'basisPoints']", # Check actual path
+        'meta_withdraw_asymmetry_raw': "['metadata', 'withdraw', 'asymmetry']" # Check actual path
+    }
+
     # --- 1. Convert to Numeric & Normalize (where applicable) ---
     # Date/Height
     if 'action_date_raw' in df:
-        df['action_date_unix'] = pd.to_numeric(df['action_date_raw'], errors='coerce') / 1_000_000_000 # ns to s
-        processed_numerical_column_names.append('action_date_unix')
+        intermediate_name = 'action_date_unix'
+        df[intermediate_name] = pd.to_numeric(df['action_date_raw'], errors='coerce') / 1_000_000_000 # ns to s
+        processed_numerical_column_names.append(intermediate_name)
+        # Config for the final scaled feature will be added later
     if 'action_height_raw' in df:
-        df['action_height_val'] = pd.to_numeric(df['action_height_raw'], errors='coerce')
-        processed_numerical_column_names.append('action_height_val')
+        intermediate_name = 'action_height_val'
+        df[intermediate_name] = pd.to_numeric(df['action_height_raw'], errors='coerce')
+        processed_numerical_column_names.append(intermediate_name)
 
-    # Columns needing 1e8 normalization (typically amounts, fees)
-    # List all _raw columns that represent amounts that need 1e8 normalization
+    # Columns needing 1e8 normalization
     amount_norm_cols_map = {
         'in_coin1_amount_raw': 'in_coin1_amount_norm',
         'out_coin1_amount_raw': 'out_coin1_amount_norm',
@@ -539,6 +624,49 @@ def process_numerical_features_generative(df_input, scaler_path, mode='train'):
     # --- 2. Scale Numerical Features ---
     scaled_feature_names_result = [f + '_scaled' for f in final_numerical_cols_to_scale]
 
+    # Populate feature_configs_numerical for each feature that will be scaled
+    for original_col_name in final_numerical_cols_to_scale: # e.g., 'action_date_unix'
+        scaled_col_name = original_col_name + '_scaled' # e.g., 'action_date_unix_scaled'
+        
+        # Try to find the original raw column and its normalization factor
+        raw_col_for_this_feature = "UNKNOWN_RAW_COL"
+        norm_factor = None
+        original_dtype_desc = "numeric"
+
+        # Check in amount_norm_cols_map
+        for rc, nc in amount_norm_cols_map.items():
+            if nc == original_col_name:
+                raw_col_for_this_feature = rc
+                norm_factor = 1e8
+                original_dtype_desc = "amount_1e8_str"
+                break
+        # Check in other_numeric_cols_map
+        if raw_col_for_this_feature == "UNKNOWN_RAW_COL":
+            for rc, vc in other_numeric_cols_map.items():
+                if vc == original_col_name:
+                    raw_col_for_this_feature = rc
+                    norm_factor = None # No explicit normalization factor other than to_numeric
+                    original_dtype_desc = "general_numeric_str"
+                    break
+        # Handle date/height separately as they are not in maps
+        if original_col_name == 'action_date_unix':
+            raw_col_for_this_feature = 'action_date_raw'
+            norm_factor = 1_000_000_000 # ns to s
+            original_dtype_desc = "timestamp_ns_str"
+        elif original_col_name == 'action_height_val':
+            raw_col_for_this_feature = 'action_height_raw'
+            norm_factor = None
+            original_dtype_desc = "height_str"
+
+        feature_configs_numerical[scaled_col_name] = {
+            'type': 'numerical_scaled',
+            'raw_column_name': raw_col_for_this_feature,
+            'intermediate_column_name': original_col_name, # This is the name_in_scaler
+            'raw_json_path': raw_json_paths_numerical_map.get(raw_col_for_this_feature, "UNKNOWN_NUMERICAL_PATH"),
+            'normalization_factor': str(norm_factor) if norm_factor else "None",
+            'original_dtype_desc': original_dtype_desc
+        }
+
     if mode == 'train':
         scaler = StandardScaler()
         # Fill NaNs with 0 for fitting the scaler. Consider mean/median if more appropriate.
@@ -556,48 +684,74 @@ def process_numerical_features_generative(df_input, scaler_path, mode='train'):
     elif mode == 'test':
         if not os.path.exists(scaler_path):
             raise FileNotFoundError(f"ERROR (test mode): Scaler file {scaler_path} not found.")
+        print(f"Loaded scaler from {scaler_path}")
         with open(scaler_path, 'rb') as f:
             scaler = pickle.load(f)
-        print(f"Loaded scaler from {scaler_path}")
 
         # Prepare DataFrame for transform, ensuring columns match scaler's expectations
-        expected_features_from_scaler = getattr(scaler, 'feature_names_in_', None) or getattr(scaler, 'n_features_in_', None)
-        if expected_features_from_scaler is None:
-             print("Warning: Scaler does not have feature_names_in_ or n_features_in_. Cannot guarantee column order/count for transform.")
-             # Fallback: use final_numerical_cols_to_scale, hoping it matches.
-             df_to_transform = df[final_numerical_cols_to_scale].fillna(0).copy()
-             if hasattr(scaler, 'n_features_in_') and df_to_transform.shape[1] != scaler.n_features_in_:
-                 raise ValueError(f"Test data has {df_to_transform.shape[1]} features, but scaler was fit on {scaler.n_features_in_} features. Columns: {final_numerical_cols_to_scale}")
+        # df_to_scale should contain the numerical columns from the current test data, with NaNs filled.
+        if not final_numerical_cols_to_scale:
+            print("Warning: No numerical columns identified in test data to scale. Skipping scaling.")
+            # scaled_feature_names_result is already an empty list if final_numerical_cols_to_scale is empty
         else:
-            if isinstance(expected_features_from_scaler, int): # If only n_features_in_ is available
-                if len(final_numerical_cols_to_scale) != expected_features_from_scaler:
-                    raise ValueError(f"Test data provides {len(final_numerical_cols_to_scale)} numerical features, but scaler expects {expected_features_from_scaler}.")
-                # Assume final_numerical_cols_to_scale is in correct order
-                df_to_transform = df[final_numerical_cols_to_scale].fillna(0).copy()
-            else: # feature_names_in_ is available (list of names)
-                df_to_transform = pd.DataFrame(columns=expected_features_from_scaler, index=df.index)
-                for feature in expected_features_from_scaler:
-                    if feature in df.columns:
-                        df_to_transform[feature] = df[feature]
+            df_to_scale = df[final_numerical_cols_to_scale].fillna(0).copy()
+
+            # Validate scaler compatibility (number of features and names)
+            num_expected_features_for_scaler = 0
+            expected_features_from_scaler_names = getattr(scaler, 'feature_names_in_', None)
+            aligned_cols_for_scaling = []
+
+            if expected_features_from_scaler_names is not None:
+                num_expected_features_for_scaler = len(expected_features_from_scaler_names)
+                print(f"  Scaler expects {num_expected_features_for_scaler} features based on feature_names_in_: {list(expected_features_from_scaler_names)}")
+                
+                # Align df_to_scale to match the scaler's expected features
+                current_data_columns = set(df_to_scale.columns)
+                scaler_expected_columns = list(expected_features_from_scaler_names)
+                
+                # Reconstruct df_to_scale based on scaler's expected columns
+                # For columns expected by scaler but missing in current data, fill with 0
+                # For columns in current data but not expected by scaler, they will be dropped here.
+                aligned_df_to_scale_data = {}
+                for col_name in scaler_expected_columns:
+                    if col_name in current_data_columns:
+                        aligned_df_to_scale_data[col_name] = df_to_scale[col_name]
                     else:
-                        print(f"Warning (test mode): Expected feature '{feature}' for scaler not found in test DataFrame. Filling with 0 for transform.")
-                        df_to_transform[feature] = 0 
-            df_to_transform = df_to_transform.fillna(0)
+                        print(f"  Warning (test mode): Feature '{col_name}' expected by scaler not found in current test data. Filling with 0 for scaling.")
+                        aligned_df_to_scale_data[col_name] = 0 # Or np.nan, but fillna(0) was used.
+                
+                df_to_scale = pd.DataFrame(aligned_df_to_scale_data, index=df_to_scale.index)
+                aligned_cols_for_scaling = scaler_expected_columns # These are the columns to scale, in order
+                print(f"  Columns aligned for scaling to match scaler's feature_names_in_.")
 
-        scaled_values = scaler.transform(df_to_transform)
+            else: # No feature_names_in_ from scaler
+                n_features_in_val = getattr(scaler, 'n_features_in_', None)
+                if n_features_in_val is not None:
+                    num_expected_features_for_scaler = n_features_in_val
+                    print(f"  Scaler expects {num_expected_features_for_scaler} features based on n_features_in_ (no names).")
+                    if len(final_numerical_cols_to_scale) != num_expected_features_for_scaler:
+                        raise ValueError(f"ERROR (test mode): Mismatch in number of features. Scaler expects {num_expected_features_for_scaler} (no names), current data has {len(final_numerical_cols_to_scale)}: {final_numerical_cols_to_scale}")
+                    aligned_cols_for_scaling = final_numerical_cols_to_scale # Assume current order is correct
+                else:
+                    print("  Warning: Could not determine the number/names of features the scaler was fitted on. Scaling based on currently found numerical columns.")
+                    aligned_cols_for_scaling = final_numerical_cols_to_scale
 
-        # Assign back based on the order of columns used for transform
-        cols_for_assignment = list(df_to_transform.columns)
-        for i, feature_name in enumerate(cols_for_assignment):
-            # Only create _scaled for originally intended columns (final_numerical_cols_to_scale)
-            if feature_name in final_numerical_cols_to_scale: 
-                 df[feature_name + '_scaled'] = scaled_values[:, i]
-        
-        # Ensure all expected scaled columns are present, even if with NaNs if source was missing from scaler
-        for feature_name in final_numerical_cols_to_scale:
-            if feature_name + '_scaled' not in df.columns:
-                print(f"Warning: Scaled column {feature_name + '_scaled'} was not created during test mode. Adding as NaN.")
-                df[feature_name + '_scaled'] = np.nan
+            if not aligned_cols_for_scaling:
+                print("Warning: No numerical columns to scale after alignment/checks.")
+            else:
+                print(f"Applying scaling in test mode to columns: {aligned_cols_for_scaling}")
+                # Ensure df_to_scale only has these columns right before transform
+                scaled_values = scaler.transform(df_to_scale[aligned_cols_for_scaling])
+                
+                for i, col_name in enumerate(aligned_cols_for_scaling):
+                    scaled_col_name = col_name + "_scaled"
+                    df[scaled_col_name] = scaled_values[:, i]
+                    # scaled_feature_names_result is populated based on original final_numerical_cols_to_scale,
+                    # which determines which _scaled columns are expected in the final output df.
+                    # We only add to scaled_feature_names_result if the original col was in final_numerical_cols_to_scale
+                    if col_name in final_numerical_cols_to_scale:
+                         if scaled_col_name not in scaled_feature_names_result: # Ensure it's added based on the original list.
+                            scaled_feature_names_result.append(scaled_col_name)
     else:
         raise ValueError(f"Invalid mode: {mode}. Choose 'train' or 'test'.")
 
@@ -610,7 +764,7 @@ def process_numerical_features_generative(df_input, scaler_path, mode='train'):
             print(f"  Scaled column '{scaled_col_name}' was not created (possibly due to missing original feature '{feature_name_orig}').")
             
     print(f"Numerical processing complete. {len(scaled_feature_names_result)} scaled features generated.")
-    return df, scaled_feature_names_result
+    return df, scaled_feature_names_result, feature_configs_numerical
 
 def generate_sequences_and_targets_generative(df_processed, seq_length, feature_columns_ordered):
     """
@@ -697,7 +851,7 @@ def main(args):
         return
 
     # ---> NEW: Call categorical processing function here
-    df_categoricals_processed, processed_cat_col_names, all_mappings = process_categorical_features_generative(
+    df_categoricals_processed, processed_cat_col_names, all_mappings, feature_configs_cat = process_categorical_features_generative(
         df_flattened, 
         artifacts_dir,
         args.mode
@@ -707,7 +861,7 @@ def main(args):
     # And df_categoricals_processed will be passed to numerical processing.
 
     # ---> NEW: Call numerical processing function here
-    df_numericals_processed, processed_num_col_names_scaled = process_numerical_features_generative(
+    df_numericals_processed, processed_num_col_names_scaled, feature_configs_num = process_numerical_features_generative(
         df_categoricals_processed, # Pass the DataFrame that has categorical features processed
         scaler_path, # Pass the scaler path defined in main()
         args.mode
@@ -759,25 +913,60 @@ def main(args):
 
     if args.mode == 'train':
         print(f"Saving generative model configuration to {model_config_path}")
+        
+        # Merge feature configurations
+        all_feature_processing_details = {}
+        for f_name in final_ordered_feature_columns:
+            if f_name in feature_configs_cat:
+                all_feature_processing_details[f_name] = feature_configs_cat[f_name]
+            elif f_name in feature_configs_num:
+                all_feature_processing_details[f_name] = feature_configs_num[f_name]
+            else:
+                all_feature_processing_details[f_name] = {'type': 'unknown', 'reason': 'Not found in cat or num configs during config save'}
+
+        # --- Save all_id_mappings to its own file ---
+        # Construct filename based on other generative args to keep it consistent if those change
+        # For now, hardcoding as it's specific to this dataset and sequence length for now
+        all_mappings_filename = "all_id_mappings_generative_mayachain_s25.json" 
+        all_mappings_path = os.path.join(args.artifacts_dir_generative, all_mappings_filename)
+        try:
+            print(f"DEBUG PREPROCESS: Attempting to save all_id_mappings separately to {all_mappings_path}")
+            print(f"DEBUG PREPROCESS: Content of all_mappings before separate save (first 500 chars): {str(all_mappings)[:500]}")
+            with open(all_mappings_path, 'w') as f_map_sep: # Renamed file handle
+                json.dump(all_mappings, f_map_sep, indent=4)
+            print(f"DEBUG PREPROCESS: Successfully saved all_id_mappings separately to {all_mappings_path}")
+        except Exception as e_map_save:
+            print(f"DEBUG PREPROCESS: ERROR saving all_id_mappings separately: {e_map_save}")
+        # --- End separate save ---
+
         model_config_generative = {
             'sequence_length': SEQUENCE_LENGTH,
-            'num_features_total': len(final_ordered_feature_columns), # From actual processed features
-            'feature_columns_ordered': final_ordered_feature_columns, # Actual ordered list
-            'categorical_id_mapping_details': all_mappings, # Use the actual mappings
-            'hashed_feature_details': { # Populate based on schema and HASH_VOCAB_SIZES
-                'in_address_hash_id': HASH_VOCAB_SIZE_ADDRESS +1, # +1 to include PAD_ID
-                'out_address_hash_id': HASH_VOCAB_SIZE_ADDRESS +1,
-                'meta_swap_affiliate_address_hash_id': HASH_VOCAB_SIZE_AFFILIATE_ADDRESS +1
-            },
-            'scaler_path': scaler_path, # Path to the saved scaler
+            'num_features_total': len(final_ordered_feature_columns),
+            'feature_columns_ordered': final_ordered_feature_columns,
+            'feature_processing_details': all_feature_processing_details,
+            'scaler_path': scaler_path,
             'pad_token_str': PAD_TOKEN_STR,
             'unknown_token_str': UNKNOWN_TOKEN_STR,
-            'no_asset_str': NO_ASSET_STR
+            'no_asset_str': NO_ASSET_STR,
+            # Store hash constants directly for reference during inference if needed for new hashing
+            'hash_seed_used': HASH_SEED,
+            'hash_vocab_sizes': {
+                 'address': HASH_VOCAB_SIZE_ADDRESS,
+                 'affiliate_address': HASH_VOCAB_SIZE_AFFILIATE_ADDRESS,
+                 'tx_id': HASH_VOCAB_SIZE_TX_ID # If TX_ID hashing is added
+            }
         }
 
+        print("DEBUG PREPROCESS: Keys in model_config_generative BEFORE saving:", list(model_config_generative.keys()))
+        print("DEBUG PREPROCESS: Content of 'all_id_mappings' BEFORE saving (first 500 chars):", str(model_config_generative.get('all_id_mappings'))[:500])
+        
+        plain_dict_to_save = dict(model_config_generative) # Convert to plain dict
+        print("DEBUG PREPROCESS: Keys in PLAIN_DICT_TO_SAVE BEFORE saving:", list(plain_dict_to_save.keys()))
+        print("DEBUG PREPROCESS: Content of 'all_id_mappings' in PLAIN_DICT_TO_SAVE (first 500 chars):", str(plain_dict_to_save.get('all_id_mappings'))[:500])
+
         with open(model_config_path, 'w') as f_config:
-            json.dump(model_config_generative, f_config, indent=4)
-        print("Generative model configuration saved (placeholder content).")
+            json.dump(plain_dict_to_save, f_config, indent=4) # Save the plain dict
+        print("Generative model configuration saved with detailed feature processing info.")
 
     print(f"--- Generative Preprocessing complete (Mode: {args.mode}). ---")
 
