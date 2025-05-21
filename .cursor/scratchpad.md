@@ -13,6 +13,7 @@ We have pivoted towards a **Generative Transaction Prediction Model**. The goal 
 -   **Composite Loss Function:** Appropriately weighting errors from different feature types.
 -   **Evaluation Metrics:** Developing metrics for transaction quality (per-feature accuracy, overall similarity, weighted scores).
 -   **Realtime Inference:** Implementing a robust suite for live prediction and simulation, including feedback loops and accurate reconstruction of Midgard-like JSON.
+-   **Accurate Numerical Scaling:** Handling diverse scales of transaction amounts (e.g., BTC vs. Dogecoin) and fees effectively to prevent model prediction distortion.
 
 ## High-level Task Breakdown
 
@@ -41,14 +42,14 @@ We have pivoted towards a **Generative Transaction Prediction Model**. The goal 
 *   **Task 4.1: Core Infrastructure & Model Loading (COMPLETED)**
 *   **Task 4.2: Implement `preprocess_single_action_for_inference` and `preprocess_sequence_for_inference` (COMPLETED)**
 *   **Task 4.3: Implement `decode_prediction` (COMPLETED)**
-*   **Task 4.4: Implement `run_generative_simulation` (COMPLETED - Initial Version, saves flat JSON)**
-*   **Task 4.5: Implement `reconstruct_to_midgard_format` (IN PROGRESS)**
+*   **Task 4.4: Implement `run_generative_simulation` (COMPLETED - Tested with `reconstruct_to_midgard_format`)**
+*   **Task 4.5: Implement `reconstruct_to_midgard_format` (COMPLETED)**
     *   **Description:** Converts the flat decoded transaction dictionary (from `decode_prediction`) into a nested JSON structure closely resembling Midgard's `/actions` endpoint output.
-    *   **Current Status:** The primary remaining issue is to ensure the `edit_file` tool correctly applies the latest version of this function, which uses numerical values directly from `flat_decoded_tx` (as they are already unscaled/un-normalized by `decode_prediction`). The logic for reconstructing nested structures for various transaction types also needs final verification after the function is correctly updated in the file.
-    *   **Next Step for New Agent:** Verify that the `reconstruct_to_midgard_format` function in `src/realtime_inference_suite.py` matches the intended corrected version (provided in prior conversation history, specifically the one designed to replace the entire function body). If not, apply the correct version. Then, run the simulation to produce `simulated_transactions_reconstructed_v3_s25_l6.json` and review its structure and values, particularly for `date`, numerical fields, and metadata sections for swap, addLiquidity, and withdraw.
-*   **Task 4.6: Implement `run_next_transaction_prediction` (FUTURE)**
-    *   Live mode: fetches latest transactions, predicts N+1, waits for actual N+1, compares.
-*   **Task 4.7: Testing, Refinement, and Documentation (Phase 4 Finalization - FUTURE)**
+    *   **Status:** Verified that the function correctly uses numerical values directly from `flat_decoded_tx` (as they are already unscaled/un-normalized by `decode_prediction`). Simulation run and output `simulated_transactions_reconstructed_v3_s25_l6.json` reviewed; `date`, numerical fields, and metadata structures appear correctly reconstructed based on direct model output.
+*   **Task 4.6: Implement `run_next_transaction_prediction` (IN PROGRESS - Live testing with new model)**
+    *   **Description:** Live mode: fetches latest transactions, predicts N+1, waits for actual N+1, compares.
+    *   **Current Status:** Initial implementation complete, needs testing
+*   **Task 4.7: Testing, Refinement, and Documentation (Phase 4 Finalization) (FUTURE)**
     *   Thoroughly test both simulation and live prediction modes. Refine outputs, logging, error handling.
 *   **Task 4.8: Project Cleanup and Documentation Update (FUTURE)**
     *   Update `README.md` for Phase 3 and 4.
@@ -64,23 +65,52 @@ We have pivoted towards a **Generative Transaction Prediction Model**. The goal 
     -   [x] Task 4.1: Core Infrastructure & Model Loading
     -   [x] Task 4.2: Implement `preprocess_single_action_for_inference` and `preprocess_sequence_for_inference`
     -   [x] Task 4.3: Implement `decode_prediction`
-    -   [x] Task 4.4: Implement `run_generative_simulation` (Initial Version - saves flat decoded JSON)
-    -   [ ] Task 4.5: Implement `reconstruct_to_midgard_format` (IN PROGRESS - Needs correct function application and verification)
-    -   [ ] Task 4.6: Implement `run_next_transaction_prediction`
+    -   [x] Task 4.4: Implement `run_generative_simulation` (Tested with `reconstruct_to_midgard_format`)
+    -   [x] Task 4.5: Implement `reconstruct_to_midgard_format` (Verified, numerical handling corrected)
+    -   [ ] Task 4.6: Implement `run_next_transaction_prediction` (IN PROGRESS - Live testing with new model)
     -   [ ] Task 4.7: Testing, Refinement, and Documentation (Phase 4 Finalization)
     -   [ ] Task 4.8: Project Cleanup and Documentation Update (Overall Project Finalization)
+-   [ ] **Phase 5: Data Refinement & Model Retraining (NEW)**
+    -   [x] **Task 5.1: Refine Amount Handling in `preprocess_ai_data.py` (COMPLETED)**
+        -   [x] **Sub-Task 5.1.A: Implement Asset-Specific Precision Handling (COMPLETED)**
+            -   Define `ASSET_PRECISIONS` map for MayaChain assets (updated with data-driven analysis).
+            -   Implement `get_asset_precision` function.
+            -   Modify `preprocess_actions_for_generative_model` (within `main`) to correctly handle amounts from `data/transactions_data.json` (confirmed to be already atomic integers) by converting them to numerical types without further multiplication by 10^precision. Store in `*_amount_atomic` columns.
+            -   Modify `process_numerical_features_generative` to use these numerical atomic amounts for generating `*_norm_scaled` columns and update `feature_configs_numerical`.
+        -   [x] **Sub-Task 5.1.B: Update `decode_prediction` in `realtime_inference_suite.py` (COMPLETED & VERIFIED)**
+            -   Copy updated `ASSET_PRECISIONS` map and `get_asset_precision`.
+            -   Ensure `decode_prediction` correctly uses this map to convert unscaled ATOMIC model outputs back to standard float string representations by DIVIDING by 10^precision.
+        -   [x] **Sub-Task 5.1.C: Verify `reconstruct_to_midgard_format` in `realtime_inference_suite.py` (COMPLETED & VERIFIED)**
+            -   Confirm that `reconstruct_to_midgard_format` correctly handles the float string amounts produced by the updated `decode_prediction`.
+    -   [ ] **Task 5.2: Implement Advanced Amount Scaling (Per-Asset) (IN PROGRESS)**
+        -   [ ] **Sub-Task 5.2.A: Modify `src/preprocess_ai_data.py` for Per-Asset Scaling (TODO)**
+            -   Implement dictionary structure for `scalers_collection` (per-asset, global, fallback).
+            -   Implement fitting logic for per-asset, global, and fallback scalers.
+            -   Implement transform logic using appropriate scalers based on asset context.
+            -   Update `model_config.json` to reflect the new scaling strategy for each numerical feature (global vs. per-asset, asset context column).
+        -   [ ] **Sub-Task 5.2.B: Modify `src/realtime_inference_suite.py` for Per-Asset Scaling (TODO)**
+            -   Update `load_model_and_artifacts` to correctly load and interpret the new `scalers_collection`.
+            -   Refactor `decode_prediction` to use the correct per-asset (or global/fallback) scaler during `inverse_transform`, ensuring asset types are decoded before their dependent amounts.
+    -   [ ] **Task 5.3: Retrain Generative Model (TODO - Depends on 5.2)**
+        -   Run `src/preprocess_ai_data.py` in `train` mode with the corrected per-asset amount handling.
+        -   Run `src/train_model.py` using the new data and artifacts.
+    -   [ ] **Task 5.4: Evaluate Retrained Model (TODO - Depends on 5.3)**
+        -   Run `src/evaluate_model_generative.py` on the new model.
+    -   [ ] Task 5.5: Test Realtime Inference with Retrained Model (FUTURE - Depends on 5.3)
+    -   [ ] Task 5.6: Implement Proper Train/Test Split & Re-evaluate Model (FUTURE)
 
 ## Executor's Feedback or Assistance Requests
 
 -   **Phase 3 Model (s25_l6) Evaluation:** Completed successfully. Overall Weighted Performance Score: 0.8316.
--   **Phase 4 - `src/realtime_inference_suite.py` - `reconstruct_to_midgard_format`:** The `edit_file` tool has been consistently failing to correctly apply the latest intended changes to ensure it uses numerical values directly from `flat_decoded_tx`. The primary task for the next agent is to ensure the correct version of this function is in place and then test it.
+-   **Phase 4 - `reconstruct_to_midgard_format`:** Correction for numerical handling (using direct values from `decode_prediction`) has been applied and verified via simulation output. The function appears to be working as intended.
+-   **Phase 4 - `run_next_transaction_prediction`:** Initial implementation is complete. This mode now needs to be tested by running against the live MayaChain API to ensure it fetches data, predicts, polls, compares, and updates context correctly. The comparison logic is currently basic and can be expanded if needed after initial live tests.
 
 ## Lessons
 
 -   `model_config.json` is the central configuration hub.
 -   `decode_prediction` handles unscaling/un-normalization. `reconstruct_to_midgard_format` uses these processed values directly.
 -   Simulation feedback loop requires `is_simulation_feedback=True` for `preprocess_single_action_for_inference`.
--   The `edit_file` tool can be unreliable for complex replacements; providing the full function body for replacement is a strategy, but may still require re-application or manual verification.
+-   The `edit_file` tool can be unreliable for complex replacements; providing the full function body for replacement is a strategy, but may still require re-application or manual verification. (Confirmed: This was an issue, but direct application of corrected logic for numericals in `reconstruct_to_midgard_format` was successful).
 
 ---
 *Older logs from Phase 2 and early Phase 3 have been condensed or removed for clarity.*

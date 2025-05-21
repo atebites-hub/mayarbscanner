@@ -31,6 +31,7 @@ Work on `src/realtime_inference_suite.py` (Phase 4) has progressed to:
 -   Decoding model predictions into a flat feature dictionary.
 -   Initial implementation of a simulation mode (`run_generative_simulation`) with a feedback loop.
 -   Ongoing refinement of `reconstruct_to_midgard_format` to convert decoded predictions into well-structured Midgard-like JSON.
+-   Refining numerical amount handling by implementing per-asset scaling strategies to improve prediction accuracy for features like transaction amounts and fees.
 
 ## Getting Started: Step-by-Step Instructions (Phase 3 & Initial Phase 4)
 

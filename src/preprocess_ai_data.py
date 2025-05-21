@@ -1,7 +1,7 @@
 print("EXECUTOR_AGENT_SANITY_CHECK_PRINT_TOP_OF_FILE_V3_GENERATIVE")
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 import json
 import os
 import pickle
@@ -9,6 +9,8 @@ import time
 from datetime import datetime
 import argparse
 import mmh3
+from collections import defaultdict
+import hashlib # For hashing memo
 
 # --- Directory Constants (can be overridden by args where applicable) ---
 DEFAULT_DATA_DIR = "data"
@@ -106,6 +108,53 @@ CANONICAL_FEATURE_ORDER = [
     'meta_withdraw_imp_loss_protection_norm_scaled',
     # (No specific numerics for refund or thorname in current V1 schema beyond flags/basic IDs)
 ]
+
+# --- ASSET PRECISION HANDLING (NEW) ---
+# For MayaChain, most assets are 8 or 10 decimals, CACAO is 10.
+# Refer to MayaNode documentation or API for definitive list for all supported assets.
+# https://docs.mayaprotocol.com/mayachain/mayachain-overview/asset-overview
+# The following map is now primarily for DECODING in realtime_inference_suite.py
+# and for reference here. Amounts in the input JSON are already atomic integers.
+ASSET_PRECISIONS = {
+    "ARB.DAI-0XDA10009CBD5D07DD0CECC66161FC93D7C9000DA1": 18, # ObservedMax: 0, IntStr: 1/1, DecStr: 0/1 -> Heuristic for DAI is 18
+    "ARB.ETH": 18, # ObservedMax: 0, IntStr: 2549/2549, DecStr: 0/2549
+    "ARB.GLD-0XAFD091F140C21770F4E5D53D26B2859AE97555AA": 8, # ObservedMax: 0, IntStr: 20/20, DecStr: 0/20
+    "ARB.LEO-0X93864D81175095DD93360FFA2A529B8642F76A6E": 8, # ObservedMax: 0, IntStr: 83/83, DecStr: 0/83
+    "ARB.LINK-0XF97F4DF75117A78C1A5A0DBB814AF92458539FB4": 18, # ObservedMax: 0, IntStr: 2/2, DecStr: 0/2 -> LINK is 18
+    "ARB.PEPE-0X25D887CE7A35172C62FEBFD67A1856F20FAEBB00": 18, # ObservedMax: 0, IntStr: 2/2, DecStr: 0/2 -> PEPE is 18
+    "ARB.TGT-0X429FED88F10285E61B12BDF00848315FBDFCC341": 8, # ObservedMax: 0, IntStr: 3504/3504, DecStr: 0/3504
+    "ARB.USDC-0XAF88D065E77C8CC2239327C5EDB3A432268E5831": 6, # ObservedMax: 0, IntStr: 9655/9655, DecStr: 0/9655 -> USDC is 6
+    "ARB.USDT-0XFD086BC7CD5C481DCC9C85EBE478A1C0B69FCBB9": 6, # ObservedMax: 0, IntStr: 1259/1259, DecStr: 0/1259 -> USDT is 6
+    "ARB.WBTC-0X2F2A2543B76A4166549F7AAB2E75BEF0AEFC5B0F": 8, # ObservedMax: 0, IntStr: 530/530, DecStr: 0/530
+    "ARB.WSTETH-0X5979D7B546E38E414F7E9822514BE443A4800529": 18, # ObservedMax: 0, IntStr: 1/1, DecStr: 0/1
+    "ARB.YUM-0X9F41B34F42058A7B74672055A5FAE22C4B113FD1": 8, # ObservedMax: 0, IntStr: 24/24, DecStr: 0/24
+    "BTC.BTC": 8, # ObservedMax: 0, IntStr: 4070/4070, DecStr: 0/4070
+    "CACAO": 10, # ObservedMax: 0, IntStr: 1670/1670, DecStr: 0/1670 (Corrected from script heuristic)
+    "DASH.DASH": 8, # ObservedMax: 0, IntStr: 456/456, DecStr: 0/456
+    "ETH.ETH": 18, # ObservedMax: 0, IntStr: 4984/4984, DecStr: 0/4984
+    "ETH.MOCA-0X53312F85BBA24C8CB99CFFC13BF82420157230D3": 18, # ObservedMax: 0, IntStr: 9/9, DecStr: 0/9
+    "ETH.PEPE-0X6982508145454CE325DDBE47A25D4EC3D2311933": 18, # ObservedMax: 0, IntStr: 23/23, DecStr: 0/23
+    "ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48": 6, # ObservedMax: 0, IntStr: 2555/2555, DecStr: 0/2555 -> USDC is 6
+    "ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7": 6, # ObservedMax: 0, IntStr: 3568/3568, DecStr: 0/3568 -> USDT is 6
+    "KUJI.KUJI": 6, # ObservedMax: 0, IntStr: 2180/2180, DecStr: 0/2180 -> KUJI is 6
+    "KUJI.USK": 6, # ObservedMax: 0, IntStr: 4/4, DecStr: 0/4
+    "MAYA.CACAO": 10, # ObservedMax: 0, IntStr: 2603/2603, DecStr: 0/2603
+    "MAYA.MAYA": 4, # ObservedMax: 0, IntStr: 2/2, DecStr: 0/2 -> MAYA (native token on MayaChain, distinct from MAYA.CACAO) is 4 decimals
+    "THOR.RUNE": 8, # ObservedMax: 0, IntStr: 19828/19828, DecStr: 0/19828
+    "XRD.XRD": 8, # ObservedMax: 0, IntStr: 505/505, DecStr: 0/505
+}
+DEFAULT_PRECISION = 8 # Default for any other assets encountered
+
+def get_asset_precision(asset_string):
+    """
+    Returns the precision for a given asset string.
+    Defaults to DEFAULT_PRECISION if the asset is not in ASSET_PRECISIONS.
+    """
+    if not isinstance(asset_string, str): # Handle potential non-string inputs gracefully
+        return DEFAULT_PRECISION
+    return ASSET_PRECISIONS.get(asset_string.upper(), DEFAULT_PRECISION)
+
+# --- END ASSET PRECISION HANDLING ---
 
 def get_or_create_mapping_generative(mapping_file_path, series=None, mode='train', pad_token=PAD_TOKEN_STR, unknown_token=UNKNOWN_TOKEN_STR, is_asset_mapping=False):
     """
@@ -348,7 +397,7 @@ def preprocess_actions_for_generative_model(actions_list, artifacts_dir, mode='t
 
     # This function will eventually return more, like mappings and scaler, but for now, just the df.
     # The other parts (ID mapping, hashing, scaling) will be separate functions called in main().
-    return df, initial_raw_feature_columns # Return df and the column order
+    return df, initial_raw_feature_columns
 
 def process_categorical_features_generative(df_input, artifacts_dir, mode='train'):
     """
@@ -573,22 +622,40 @@ def process_numerical_features_generative(df_input, scaler_path, mode='train'):
         df[intermediate_name] = pd.to_numeric(df['action_height_raw'], errors='coerce')
         processed_numerical_column_names.append(intermediate_name)
 
-    # Columns needing 1e8 normalization
-    amount_norm_cols_map = {
-        'in_coin1_amount_raw': 'in_coin1_amount_norm',
-        'out_coin1_amount_raw': 'out_coin1_amount_norm',
-        'meta_swap_liquidityFee_raw': 'meta_swap_liquidityFee_norm',
-        'meta_swap_networkFee1_amount_raw': 'meta_swap_networkFee1_amount_norm',
-        'meta_swap_affiliateFee_amount_raw': 'meta_swap_affiliateFee_norm',
-        'meta_swap_streaming_quantity_raw': 'meta_swap_streaming_quantity_norm',
-        'meta_withdraw_imp_loss_protection_raw': 'meta_withdraw_imp_loss_protection_norm'
+    # Columns needing scaling. These are now the _atomic columns created previously.
+    # The original _raw columns are no longer directly used for scaling here.
+    # The 'normalization' (1e8) is also implicitly handled as they are already atomic.
+    atomic_amount_cols_to_scale = {
+        # raw_col_original_source (for reference/config) : atomic_col_to_use_for_scaling
+        'in_coin1_amount_raw': 'in_coin1_amount_atomic',
+        'out_coin1_amount_raw': 'out_coin1_amount_atomic',
+        'meta_swap_liquidityFee_raw': 'meta_swap_liquidityFee_atomic',
+        'meta_swap_networkFee1_amount_raw': 'meta_swap_networkFee1_amount_atomic',
+        'meta_swap_affiliateFee_raw': 'meta_swap_affiliateFee_atomic', # Assuming affiliate fee is in same asset as liquidity fee/first pool
+        'meta_swap_streaming_quantity_raw': 'meta_swap_streaming_quantity_atomic', # Streaming quantity is of the input asset
+        'meta_addLiquidity_asset1_amount_raw': ('pool1_asset_raw', 'meta_addLiquidity_asset1_amount_atomic'), # Example, if schema had this
+        'meta_addLiquidity_asset2_amount_raw': ('pool2_asset_raw', 'meta_addLiquidity_asset2_amount_atomic'), # Example, if schema had this
+        'meta_withdraw_imp_loss_protection_raw': ('MAYA.CACAO', 'meta_withdraw_imp_loss_protection_atomic') # ILP is in CACAO
+        # Add other raw amount columns from your flat_features if they exist
     }
-    for raw_col, norm_col in amount_norm_cols_map.items():
-        if raw_col in df:
-            df[norm_col] = pd.to_numeric(df[raw_col], errors='coerce') / 1e8
-            processed_numerical_column_names.append(norm_col)
+
+    for raw_src_col, atomic_col in atomic_amount_cols_to_scale.items():
+        if atomic_col in df:
+            # Convert to numeric. Atomic columns should already be numeric (int), but this ensures dtype.
+            df[atomic_col] = pd.to_numeric(df[atomic_col], errors='coerce') 
+            # No 1e8 division needed here as it's already atomic.
+            processed_numerical_column_names.append(atomic_col) # Add the atomic_col for scaling
+            # Store config based on atomic_col, but reference the original raw source
+            feature_configs_numerical[atomic_col + '_scaled'] = {
+                'type': 'numerical_scaled',
+                'raw_column_name': raw_src_col, # Original source before atomic conversion
+                'intermediate_column_name': atomic_col, # This is the name_in_scaler
+                'raw_json_path': raw_json_paths_numerical_map.get(raw_src_col, "UNKNOWN_ATOMIC_SOURCE_PATH"),
+                'normalization_factor': "ALREADY_ATOMIC", # Indicates precision multiplication already done
+                'original_dtype_desc': "integer_atomic_units"
+            }
         else:
-            print(f"Warning: Amount column '{raw_col}' not found for 1e8 normalization.")
+            print(f"Warning: Atomic amount column '{atomic_col}' (from '{raw_src_col}') not found for scaling.")
 
     # Other numericals (no 1e8 normalization, just convert to numeric)
     other_numeric_cols_map = {
@@ -632,23 +699,16 @@ def process_numerical_features_generative(df_input, scaler_path, mode='train'):
         raw_col_for_this_feature = "UNKNOWN_RAW_COL"
         norm_factor = None
         original_dtype_desc = "numeric"
+        is_atomic_handled_already = False
 
-        # Check in amount_norm_cols_map
-        for rc, nc in amount_norm_cols_map.items():
-            if nc == original_col_name:
-                raw_col_for_this_feature = rc
-                norm_factor = 1e8
-                original_dtype_desc = "amount_1e8_str"
+        for rc_src, ac in atomic_amount_cols_to_scale.items():
+            if ac == original_col_name: # original_col_name is like 'in_coin1_amount_atomic'
+                # This config is already set up when atomic_amount_cols_to_scale was iterated.
+                is_atomic_handled_already = True
                 break
-        # Check in other_numeric_cols_map
-        if raw_col_for_this_feature == "UNKNOWN_RAW_COL":
-            for rc, vc in other_numeric_cols_map.items():
-                if vc == original_col_name:
-                    raw_col_for_this_feature = rc
-                    norm_factor = None # No explicit normalization factor other than to_numeric
-                    original_dtype_desc = "general_numeric_str"
-                    break
-        # Handle date/height separately as they are not in maps
+        
+        if not is_atomic_handled_already:
+            # Handle other numericals (non-atomic, e.g. date, height, slip, counts)
         if original_col_name == 'action_date_unix':
             raw_col_for_this_feature = 'action_date_raw'
             norm_factor = 1_000_000_000 # ns to s
@@ -657,6 +717,13 @@ def process_numerical_features_generative(df_input, scaler_path, mode='train'):
             raw_col_for_this_feature = 'action_height_raw'
             norm_factor = None
             original_dtype_desc = "height_str"
+            else: # General numeric types from other_numeric_cols_map
+                for rc, vc in other_numeric_cols_map.items():
+                    if vc == original_col_name:
+                        raw_col_for_this_feature = rc
+                        norm_factor = None # No explicit normalization factor other than to_numeric
+                        original_dtype_desc = "general_numeric_str"
+                        break
 
         feature_configs_numerical[scaled_col_name] = {
             'type': 'numerical_scaled',
@@ -823,7 +890,7 @@ def main(args):
         return
 
     # Placeholder for the main new preprocessing function
-    df_flattened, ordered_raw_feature_names_temp = preprocess_actions_for_generative_model(
+    df_flattened, initial_raw_feature_columns = preprocess_actions_for_generative_model(
         raw_actions_list, 
         artifacts_dir,
         args.mode
@@ -833,9 +900,59 @@ def main(args):
         print("Preprocessing (flattening) returned an empty DataFrame. Cannot proceed.")
         return
         
+    # --- NEW: Convert raw amounts to numerical (atomic units are already in source) ---
+    print("\n--- Converting amounts to numerical (atomic units are already in source) ---")
+    # Define which raw amount columns to process and their corresponding asset columns
+    # The key change here is that raw amount strings are already atomic integers.
+    # We just need to convert them to a numerical type for the scaler.
+    atomic_conversion_map = {
+        'in_coin1_amount_raw': ('in_coin1_asset_raw', 'in_coin1_amount_atomic'),
+        'out_coin1_amount_raw': ('out_coin1_asset_raw', 'out_coin1_amount_atomic'),
+        'meta_swap_liquidityFee_raw': ('pool1_asset_raw', 'meta_swap_liquidityFee_atomic'),
+        'meta_swap_affiliateFee_raw': ('pool1_asset_raw', 'meta_swap_affiliateFee_atomic'), # Assuming affiliate fee is in same asset as liquidity fee/first pool
+        'meta_swap_networkFee1_amount_raw': ('meta_swap_networkFee1_asset_raw', 'meta_swap_networkFee1_amount_atomic'),
+        'meta_swap_streaming_quantity_raw': ('in_coin1_asset_raw', 'meta_swap_streaming_quantity_atomic'), # Streaming quantity is of the input asset
+        'meta_addLiquidity_asset1_amount_raw': ('pool1_asset_raw', 'meta_addLiquidity_asset1_amount_atomic'), # Example, if schema had this
+        'meta_addLiquidity_asset2_amount_raw': ('pool2_asset_raw', 'meta_addLiquidity_asset2_amount_atomic'), # Example, if schema had this
+        'meta_withdraw_imp_loss_protection_raw': ('MAYA.CACAO', 'meta_withdraw_imp_loss_protection_atomic') # ILP is in CACAO
+        # Add other raw amount columns from your flat_features if they exist
+    }
+
+    for raw_col, (asset_col_name, atomic_col_name) in atomic_conversion_map.items():
+        if raw_col in df_flattened.columns:
+            print(f"  Processing raw amount column: {raw_col} -> into numerical atomic column: {atomic_col_name}")
+            
+            def convert_raw_atomic_to_numerical(row):
+                raw_amount_str = row.get(raw_col)
+                # asset_str = row.get(asset_col_name) # Asset string not strictly needed here as no multiplication by precision
+
+                if pd.isna(raw_amount_str) or raw_amount_str == "":
+                    return np.nan # Or 0.0 if preferred for missing, but NaN is better for scalers
+                
+                try:
+                    # Amounts are already atomic integers, just parse them.
+                    # Using float for consistency with how scalers might treat them,
+                    # though they represent integer units.
+                    return float(raw_amount_str)
+                except (ValueError, TypeError):
+                    print(f"    Warning: Could not convert raw atomic amount '{raw_amount_str}' to float for column {raw_col}. Original asset: {row.get(asset_col_name, 'N/A')}. Returning NaN.")
+                    return np.nan
+
+            df_flattened[atomic_col_name] = df_flattened.apply(convert_raw_atomic_to_numerical, axis=1)
+            
+            # Optional: Log some stats about the new atomic column
+            if atomic_col_name in df_flattened:
+                 print(f"    Created {atomic_col_name}. Non-NaN count: {df_flattened[atomic_col_name].notna().sum()}, Sample (first few non-NaN): {df_flattened[atomic_col_name].dropna().head(3).tolist()}")
+        else:
+            print(f"  Skipping {raw_col} for atomic conversion: column not found in df_flattened.")
+
+    # Ensure the feature_configs_numerical uses these new _atomic column names
+    # This is handled in process_numerical_features_generative by its definition of columns_to_scale
+
+    print("\n--- Saving processed data, scaler, and config (Generative Model) ---")
     # For this intermediate step, the placeholder_feature_columns will be the ordered_raw_feature_names_temp
     # In the final version, this will be the list of *fully processed* (ID-mapped, hashed, scaled) feature names.
-    placeholder_feature_columns_for_sequence_test = ordered_raw_feature_names_temp
+    placeholder_feature_columns_for_sequence_test = initial_raw_feature_columns
     
     # --- TEMPORARY: Convert all selected raw columns to numeric for sequence generation test ---
     # This is a HACK. Real processing will create dedicated numerical columns.

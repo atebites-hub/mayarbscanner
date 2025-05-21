@@ -47,7 +47,53 @@ def get_nested_value_from_df(row, path_str, default=None):
 MODEL_CONTEXT_LENGTH = 25 # Default, will be overridden by loaded model_config if available
 ACTIONS_PER_PAGE = 50 # Midgard API limit for /actions
 API_DELAY_SECONDS = 0.5 # Delay between Midgard polling attempts
-PREDICTION_POLL_INTERVAL_SECONDS = 10 # How often to check for a new actual transaction
+PREDICTION_POLL_INTERVAL_SECONDS = 60 # How often to check for a new actual transaction
+
+# --- ASSET PRECISION HANDLING (Copied and updated from preprocess_ai_data.py) ---
+# This map is CRUCIAL for correctly decoding model outputs (atomic amounts) back to float strings.
+ASSET_PRECISIONS = {
+    "ARB.DAI-0XDA10009CBD5D07DD0CECC66161FC93D7C9000DA1": 18, 
+    "ARB.ETH": 18,
+    "ARB.GLD-0XAFD091F140C21770F4E5D53D26B2859AE97555AA": 8, 
+    "ARB.LEO-0X93864D81175095DD93360FFA2A529B8642F76A6E": 8, 
+    "ARB.LINK-0XF97F4DF75117A78C1A5A0DBB814AF92458539FB4": 18,
+    "ARB.PEPE-0X25D887CE7A35172C62FEBFD67A1856F20FAEBB00": 18,
+    "ARB.TGT-0X429FED88F10285E61B12BDF00848315FBDFCC341": 8, 
+    "ARB.USDC-0XAF88D065E77C8CC2239327C5EDB3A432268E5831": 6, 
+    "ARB.USDT-0XFD086BC7CD5C481DCC9C85EBE478A1C0B69FCBB9": 6, 
+    "ARB.WBTC-0X2F2A2543B76A4166549F7AAB2E75BEF0AEFC5B0F": 8, 
+    "ARB.WSTETH-0X5979D7B546E38E414F7E9822514BE443A4800529": 18,
+    "ARB.YUM-0X9F41B34F42058A7B74672055A5FAE22C4B113FD1": 8, 
+    "BTC.BTC": 8, 
+    "CACAO": 10, # For raw CACAO asset string if it appears, MAYA.CACAO is primary
+    "DASH.DASH": 8, 
+    "ETH.ETH": 18, 
+    "ETH.MOCA-0X53312F85BBA24C8CB99CFFC13BF82420157230D3": 18,
+    "ETH.PEPE-0X6982508145454CE325DDBE47A25D4EC3D2311933": 18,
+    "ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48": 6, 
+    "ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7": 6, 
+    "KUJI.KUJI": 6,
+    "KUJI.USK": 6, 
+    "MAYA.CACAO": 10,
+    "MAYA.MAYA": 4, 
+    "THOR.RUNE": 8, 
+    "XRD.XRD": 8,
+}
+DEFAULT_PRECISION = 8 # Default for any other assets encountered
+
+def get_asset_precision(asset_string):
+    """
+    Returns the precision for a given asset string.
+    Defaults to DEFAULT_PRECISION if the asset is not in ASSET_PRECISIONS.
+    Handles NO_ASSET, PAD, UNKNOWN by returning 0 precision.
+    """
+    if not isinstance(asset_string, str):
+        return DEFAULT_PRECISION
+    # Handle special known non-asset strings first
+    if asset_string.upper() in ["NO_ASSET", "PAD", "UNKNOWN"]:
+        return 0 # These should not undergo 10**precision scaling
+    return ASSET_PRECISIONS.get(asset_string.upper(), DEFAULT_PRECISION)
+# --- END ASSET PRECISION HANDLING ---
 
 # --- Model Definitions (Copied from src/model.py) ---
 class PositionalEncoding(nn.Module):
@@ -259,11 +305,12 @@ def load_model_and_artifacts(model_path, artifacts_dir, model_config_filename):
     else:
         # Fallback if 'embedding_dim_config_used' is somehow missing (should not happen with up-to-date training script)
         embedding_config_for_model = {
-            'default_cat_embed_dim': 16, # A very basic default
-            'asset_embed_dim': 32, 
-            'hash_embed_dim': 24 
+            'default_cat_embed_dim': 16, # A very basic default, might need adjustment
+            'asset_embed_dim': 48,      # Updated based on error messages
+            'address_hash_embed_dim': 64 # Updated based on error messages for address hashes
+            # 'hash_embed_dim' was a more generic key, model uses 'address_hash_embed_dim' specifically if present
         }
-        print(f"  Warning: 'embedding_dim_config_used' not found in model_config. Using a basic fallback: {embedding_config_for_model}")
+        print(f"  Warning: 'embedding_dim_config_used' not found in model_config. Using an updated fallback based on error messages: {embedding_config_for_model}")
     # print(f"  Using embedding_dim_config: {embedding_config_for_model}") # Redundant, already printed specific source
 
 
@@ -576,7 +623,7 @@ def preprocess_sequence_for_inference(raw_actions_json_list, scaler, all_mapping
     return np.array(sequence_vectors, dtype=np.float32)
 
 
-def decode_prediction(raw_model_output_vector, scaler, all_mappings, model_config):
+def decode_prediction(raw_model_output_vector, scaler, all_mappings, model_config, model=None):
     """
     Decodes the raw output vector from the model into a human-readable dictionary.
     raw_model_output_vector: A 1D numpy array from model.predict_single_step (already on CPU).
@@ -586,14 +633,19 @@ def decode_prediction(raw_model_output_vector, scaler, all_mappings, model_confi
         raw_model_output_vector = raw_model_output_vector.squeeze(0) # Remove batch dim if present
 
     decoded_transaction = {}
-    feature_output_info_list = model_config.get('feature_output_info_model', [])
-    # Fallback if not in config, but ideally it should be saved by train script or directly use model.feature_output_info if model instance is passed
-    if not feature_output_info_list:
-        # This is a critical piece of info. If the model object isn't passed to provide model.feature_output_info,
-        # it MUST be in the model_config.json. For now, we assume it is called 'feature_output_info_model'.
-        # As a last resort, we might try to reconstruct it if enough details are in feature_processing_details
-        # but that's prone to errors. Let's make it a requirement for now.
-        raise ValueError("'feature_output_info_model' not found in model_config. This is required for decoding.")
+    
+    # Prioritize model.feature_output_info if model is provided
+    feature_output_info_list = []
+    if model and hasattr(model, 'feature_output_info') and model.feature_output_info:
+        feature_output_info_list = model.feature_output_info
+        print("  Using model.feature_output_info for decoding.")
+    else:
+        feature_output_info_list = model_config.get('feature_output_info_model', [])
+        if not feature_output_info_list:
+            raise ValueError("'feature_output_info_model' not found in model_config and model instance not provided or missing attribute. This is required for decoding.")
+        else:
+            print("  Using 'feature_output_info_model' from model_config for decoding.")
+
 
     feature_processing_details = model_config['feature_processing_details']
 
@@ -647,6 +699,17 @@ def decode_prediction(raw_model_output_vector, scaler, all_mappings, model_confi
         end_idx = f_out_info['output_end_idx']
         feature_slice = raw_model_output_vector[start_idx:end_idx]
 
+        if feature_name == 'in_coin1_amount_norm_scaled': # DEBUG PRINT
+            print(f"  [DEBUG InCoin1Amount] Raw model output slice for {feature_name}: {feature_slice.item()}")
+
+        # DEBUG PRINTS FOR LIQUIDITY FEE
+        if feature_name == 'meta_swap_liquidityFee_atomic_scaled':
+            print(f"  [DEBUG LiqFee] Raw model output slice for {feature_name}: {feature_slice.item()}")
+        
+        # DEBUG PRINTS FOR SWAP SLIP
+        if feature_name == 'meta_swap_swapSlip_bps_val_scaled':
+            print(f"  [DEBUG SwapSlip] Raw model output slice for {feature_name}: {feature_slice.item()}")
+
         if f_type == 'id_map':
             predicted_id = np.argmax(torch.softmax(torch.tensor(feature_slice), dim=-1).numpy())
             mapping_file_name = f_detail['mapping_file']
@@ -669,8 +732,45 @@ def decode_prediction(raw_model_output_vector, scaler, all_mappings, model_confi
             # Store the predicted scaled value. We'll inverse transform all numericals together later.
             intermediate_name = f_detail['intermediate_column_name'] # This is the name in the scaler
             if intermediate_name in dummy_scaled_numerical_row_dict:
-                 dummy_scaled_numerical_row_dict[intermediate_name] = feature_slice.item() # single value
-                 predicted_scaled_values_map[feature_name] = feature_slice.item() # Keep track by final name too
+                dummy_scaled_numerical_row_dict[intermediate_name] = feature_slice.item() # single value
+                predicted_scaled_values_map[feature_name] = feature_slice.item() # Keep track by final name too
+
+                if feature_name == 'in_coin1_amount_norm_scaled' and scaler_feature_names: # DEBUG PRINT
+                    try:
+                        idx_in_scaler = scaler_feature_names.index(intermediate_name)
+                        print(f"  [DEBUG InCoin1Amount] Scaler mean for {intermediate_name}: {scaler.mean_[idx_in_scaler]}")
+                        print(f"  [DEBUG InCoin1Amount] Scaler scale (std) for {intermediate_name}: {scaler.scale_[idx_in_scaler]}")
+                        norm_factor_debug = f_detail.get('normalization_factor', "None")
+                        print(f"  [DEBUG InCoin1Amount] Normalization factor for {feature_name}: {norm_factor_debug}")
+                    except ValueError:
+                        print(f"  [DEBUG InCoin1Amount] Could not find {intermediate_name} in scaler_feature_names for debug.")
+                    except AttributeError:
+                        print(f"  [DEBUG InCoin1Amount] Scaler does not have mean_/scale_ attributes or they are not arrays.")
+                
+                # DEBUG PRINTS FOR LIQUIDITY FEE SCALER PARAMS
+                if feature_name == 'meta_swap_liquidityFee_atomic_scaled' and scaler_feature_names:
+                    try:
+                        idx_in_scaler = scaler_feature_names.index(intermediate_name)
+                        print(f"  [DEBUG LiqFee] Scaler mean for {intermediate_name}: {scaler.mean_[idx_in_scaler]}")
+                        print(f"  [DEBUG LiqFee] Scaler scale (std) for {intermediate_name}: {scaler.scale_[idx_in_scaler]}")
+                        # Liquidity fee uses 'ALREADY_ATOMIC', no specific norm_factor like 1e8 to print here for this stage
+                    except ValueError:
+                        print(f"  [DEBUG LiqFee] Could not find {intermediate_name} in scaler_feature_names for debug.")
+                    except AttributeError:
+                        print(f"  [DEBUG LiqFee] Scaler does not have mean_/scale_ attributes or they are not arrays.")
+
+                # DEBUG PRINTS FOR SWAP SLIP SCALER PARAMS
+                if feature_name == 'meta_swap_swapSlip_bps_val_scaled' and scaler_feature_names:
+                    try:
+                        idx_in_scaler = scaler_feature_names.index(intermediate_name)
+                        print(f"  [DEBUG SwapSlip] Scaler mean for {intermediate_name}: {scaler.mean_[idx_in_scaler]}")
+                        print(f"  [DEBUG SwapSlip] Scaler scale (std) for {intermediate_name}: {scaler.scale_[idx_in_scaler]}")
+                        # Swap slip has norm_factor "None"
+                    except ValueError:
+                        print(f"  [DEBUG SwapSlip] Could not find {intermediate_name} in scaler_feature_names for debug.")
+                    except AttributeError:
+                        print(f"  [DEBUG SwapSlip] Scaler does not have mean_/scale_ attributes or they are not arrays.")
+
             else:
                 print(f"Warning: Intermediate name '{intermediate_name}' for '{feature_name}' not in scaler feature names. Cannot decode.")
                 decoded_transaction[feature_name] = "ERROR_SCALER_MISMATCH"
@@ -689,20 +789,107 @@ def decode_prediction(raw_model_output_vector, scaler, all_mappings, model_confi
             unscaled_values_row = scaler.inverse_transform(np.array(ordered_scaled_values_for_scaler).reshape(1, -1))
             unscaled_values_dict = {name: val for name, val in zip(scaler_feature_names, unscaled_values_row[0])}
 
-            # Now populate the decoded_transaction with the unscaled and un-normalized values
+            # Now populate the decoded_transaction with the unscaled and (potentially) un-normalized/un-atomized values
+            
+            # Define a map from atomic amount intermediate column names to their corresponding asset ID feature names (from decoded_transaction)
+            # Keys are 'intermediate_column_name' for atomic amounts (e.g., 'in_coin1_amount_atomic')
+            # Values are feature names of the *decoded asset string* (e.g., 'in_coin1_asset_id')
+            atomic_to_asset_feature_map = {
+                'in_coin1_amount_atomic': 'in_coin1_asset_id',
+                'out_coin1_amount_atomic': 'out_coin1_asset_id',
+                'meta_swap_liquidityFee_atomic': 'pool1_asset_id', # Assumes fee is in terms of the first pool asset
+                'meta_swap_networkFee1_amount_atomic': 'meta_swap_networkFee1_asset_id',
+                # For affiliate fee and ILP, if they are always in a fixed asset (e.g., MAYA.CACAO),
+                # we can directly use that asset string instead of looking up a predicted one.
+                'meta_swap_affiliateFee_atomic': 'MAYA.CACAO', # Fixed asset string
+                'meta_swap_streaming_quantity_atomic': 'in_coin1_asset_id', # Assumes streaming quantity is of the input asset
+                'meta_withdraw_imp_loss_protection_atomic': 'MAYA.CACAO' # Fixed asset string
+            }
+
             for feature_name, f_detail in feature_processing_details.items():
                 if f_detail['type'] == 'numerical_scaled':
-                    intermediate_name = f_detail['intermediate_column_name']
+                    intermediate_name = f_detail['intermediate_column_name'] # e.g., 'in_coin1_amount_atomic' or 'action_date_unix'
+                    
                     if intermediate_name in unscaled_values_dict:
                         final_value = unscaled_values_dict[intermediate_name]
-                        norm_factor_str = f_detail.get('normalization_factor', "None")
-                        if norm_factor_str != "None":
-                            try: final_value *= float(norm_factor_str)
-                            except ValueError: pass # If norm_factor is not a float convertible string
+                        
+                        # Check if this is an atomic amount that needs conversion back to float string
+                        if f_detail.get('original_dtype_desc') == 'integer_atomic_units' or f_detail.get('normalization_factor') == "ALREADY_ATOMIC":
+                            asset_string_or_feature_name = atomic_to_asset_feature_map.get(intermediate_name)
+                            predicted_asset_str = "MAYA.CACAO" # Default asset if lookup fails
+
+                            if asset_string_or_feature_name:
+                                if '.' in asset_string_or_feature_name: # It's a direct asset string (e.g., "MAYA.CACAO")
+                                    predicted_asset_str = asset_string_or_feature_name
+                                elif asset_string_or_feature_name in decoded_transaction: # It's a feature name for the asset ID
+                                    predicted_asset_str = decoded_transaction[asset_string_or_feature_name]
+                                    # Handle cases where predicted asset string might be PAD/UNKNOWN from previous decoding step
+                                    if predicted_asset_str in [model_config.get('pad_token_str', 'PAD'), model_config.get('unknown_token_str', 'UNKNOWN'), model_config.get('no_asset_str', 'NO_ASSET')]:
+                                        # If asset is PAD/UNKNOWN/NO_ASSET, precision is 0, amount effectively stays as is or becomes 0.
+                                        # get_asset_precision handles these by returning 0.
+                                        pass # Let get_asset_precision handle it.
+                                else:
+                                    print(f"Warning: Asset ID feature '{asset_string_or_feature_name}' for amount '{intermediate_name}' not found in decoded_transaction. Defaulting to MAYA.CACAO for precision.")
+                            else:
+                                print(f"Warning: No asset mapping for atomic amount '{intermediate_name}'. Defaulting to MAYA.CACAO for precision.")
+
+                            precision = get_asset_precision(predicted_asset_str)
+                            
+                            if precision > 0:
+                                try:
+                                    # Ensure atomic_value is treated as an integer before division
+                                    atomic_int_value = int(round(final_value)) # Model might output float close to int
+                                    float_value = atomic_int_value / (10**precision)
+                                    # Format to a string with appropriate decimal places, avoiding scientific notation for typical amounts
+                                    # Using f-string with a general format specifier for float, or a fixed number of decimals
+                                    if precision <= 8: # For common crypto amounts
+                                        final_value = f"{float_value:.{precision}f}" 
+                                    else: # For higher precision like ETH, more decimals might be needed or general format
+                                        final_value = f"{float_value:.18f}".rstrip('0').rstrip('.') # Max 18, strip trailing zeros
+                                except ValueError:
+                                    print(f"Warning: Could not convert atomic value {final_value} to int for {intermediate_name}. Keeping as is.")
+                                    final_value = str(final_value) # Keep as string if conversion fails
+                            else: # Precision is 0 (e.g. for NO_ASSET or if asset is PAD/UNKNOWN)
+                                final_value = str(int(round(final_value))) # Should be integer string
+
+                            # Store this final string amount using the original feature name (e.g. 'in_coin1_amount_norm_scaled')
+                            # or a more generic name if reconstruct_to_midgard expects it differently.
+                            # For now, let's update decoded_transaction[feature_name]
+                            decoded_transaction[feature_name] = final_value
+                            if feature_name == 'in_coin1_amount_norm_scaled': # DEBUG PRINT
+                                print(f"  [DEBUG InCoin1Amount] Post-atomic conversion for {feature_name}: {final_value} (Asset: {predicted_asset_str}, Precision: {precision})")
+                            # DEBUG PRINTS FOR LIQUIDITY FEE POST CONVERSION
+                            if feature_name == 'meta_swap_liquidityFee_atomic_scaled':
+                                print(f"  [DEBUG LiqFee] Post-atomic conversion for {feature_name}: {final_value} (Asset for precision: {predicted_asset_str}, Precision: {precision})")
+
+                        else: # Not an atomic amount, but other numerical (e.g., date, slip_bps)
+                            # Perform any non-atomic-specific un-normalization if needed (e.g. date from unixtime)
+                            # The original 'normalization_factor' logic for non-atomics:
+                            norm_factor_str = f_detail.get('normalization_factor', "None")
+                            if norm_factor_str != "None" and norm_factor_str != "ALREADY_ATOMIC":
+                                try: 
+                                    final_value *= float(norm_factor_str)
+                                except (ValueError, TypeError): 
+                                    print(f"Warning: Could not apply norm_factor '{norm_factor_str}' to {feature_name}")
+                            
+                            # Specific handling for date (convert to int string) or other formats if needed
+                            if 'date_unix' in intermediate_name:
+                                final_value = str(int(round(final_value))) # Date is int string
+                            elif 'height_val' in intermediate_name:
+                                final_value = str(int(round(final_value))) # Height is int string
+                            # For other values like slip, count, basis_points, they might need to be int strings
+                            elif any(s in intermediate_name for s in ['Slip_bps', '_count', '_units', '_points']):
+                                final_value = str(int(round(final_value)))
+                                # DEBUG PRINTS FOR SWAP SLIP POST CONVERSION
+                                if feature_name == 'meta_swap_swapSlip_bps_val_scaled':
+                                    print(f"  [DEBUG SwapSlip] Final formatted value for {feature_name}: {final_value}") 
+                            # Asymmetry might be float string
+                            elif 'asymmetry' in intermediate_name:
+                                 final_value = f"{final_value:.4f}" # Example formatting
+
                         decoded_transaction[feature_name] = final_value
-                    # If not in unscaled_values_dict, it means it wasn't in scaler_feature_names or error occurred
-                    # The placeholder ERROR_SCALER_MISMATCH or the raw scaled value would already be there
-                    elif feature_name not in decoded_transaction: # if no error was set before
+                    
+                    elif feature_name not in decoded_transaction: # if no error was set before by the main loop
                         decoded_transaction[feature_name] = predicted_scaled_values_map.get(feature_name, "ERROR_POST_INV_SCALE_MISSING")
         except Exception as e:
             print(f"Error during inverse_transform: {e}. Numerical values will be raw scaled outputs.")
@@ -726,30 +913,19 @@ def predict_single_step(model, processed_input_sequence, device):
         raw_prediction = model(input_tensor) # Expected shape (batch_size, full_output_dim)
     return raw_prediction.cpu().numpy() # Return as numpy array
 
-def run_next_transaction_prediction(args, model, scaler, model_config, device):
+def run_next_transaction_prediction(args, model, scaler, all_mappings, model_config, device):
     """
     Runs the live next transaction prediction mode.
     Fetches the latest N transactions, predicts N+1, waits for actual N+1, compares, and repeats.
     """
-    print("\\n--- Starting Next Transaction Prediction Mode ---")
+    print("\n--- Starting Next Transaction Prediction Mode ---")
     
-    # Use sequence_length from model_config, fall back to global if not present
     current_model_context_length = model_config.get('sequence_length', MODEL_CONTEXT_LENGTH)
     print(f"Using model context length (sequence length): {current_model_context_length}")
 
-    # Load all_id_mappings using the correct key from model_config
-    # all_mappings = model_config.get('all_id_mappings', {}) # OLD WAY - REMOVED
-    # if not all_mappings:
-    #     print("Warning: 'all_id_mappings' not found in model_config. ID-based decoding/preprocessing might be limited.")
-
-    # Use the all_mappings_loaded from the separate file, passed from load_model_and_artifacts
-    # This variable is now passed directly to functions needing it, e.g. preprocess_sequence_for_inference
-
-    # 1. Initialize context with the latest transactions
     print(f"Fetching initial context of {current_model_context_length} transactions...")
     live_context_raw_actions = []
     try:
-        # Fetch slightly more initially in case some are not suitable or to get a good starting point
         initial_fetch_count = current_model_context_length + 10 
         raw_response = fetch_recent_maya_actions(limit=initial_fetch_count, offset=0)
         
@@ -758,12 +934,8 @@ def run_next_transaction_prediction(args, model, scaler, model_config, device):
             return
 
         recent_actions_list = raw_response['actions']
-        # Sort by date (older to newer) to ensure correct sequence for model
-        # Midgard API usually returns newer first, so we reverse if needed, or sort directly.
-        # The API itself might sometimes return them sorted, but explicit sort is safer.
         recent_actions_list.sort(key=lambda x: int(x.get('date', 0))) 
         
-        # Take the most recent N actions for the initial context
         live_context_raw_actions = recent_actions_list[-current_model_context_length:]
         
         if len(live_context_raw_actions) < current_model_context_length:
@@ -771,6 +943,7 @@ def run_next_transaction_prediction(args, model, scaler, model_config, device):
                   f"needed {current_model_context_length}. Predictions might be less accurate.")
         else:
             print(f"Initial context of {len(live_context_raw_actions)} transactions loaded successfully.")
+        if live_context_raw_actions:
             print(f"  Oldest in context: Date {live_context_raw_actions[0].get('date')} Type {live_context_raw_actions[0].get('type')}")
             print(f"  Newest in context: Date {live_context_raw_actions[-1].get('date')} Type {live_context_raw_actions[-1].get('type')}")
 
@@ -778,98 +951,116 @@ def run_next_transaction_prediction(args, model, scaler, model_config, device):
         print(f"Error during initial context fetch: {e}")
         return
 
-    # 2. Loop for N predictions
     for i in range(args.num_predictions_to_make):
-        print(f"\\n--- Prediction Iteration {i+1}/{args.num_predictions_to_make} ---")
+        print(f"\n--- Prediction Iteration {i+1}/{args.num_predictions_to_make} ---")
         if not live_context_raw_actions or len(live_context_raw_actions) < current_model_context_length:
-            print("Error: Not enough actions in context to make a prediction. Skipping iteration.")
-            time.sleep(args.next_tx_poll_interval) # Wait before trying to refetch
-            # Attempt to re-fetch context
+            print("Error: Not enough actions in context to make a prediction. Attempting to refetch context...")
             try:
-                raw_response_refetch = fetch_recent_maya_actions(limit=current_model_context_length, offset=0)
+                refetch_count = current_model_context_length + 5 # Fetch a bit more to be safe
+                raw_response_refetch = fetch_recent_maya_actions(limit=refetch_count, offset=0)
                 if raw_response_refetch and 'actions' in raw_response_refetch and raw_response_refetch['actions']:
                     recent_actions_list_refetch = raw_response_refetch['actions']
                     recent_actions_list_refetch.sort(key=lambda x: int(x.get('date', 0)))
                     live_context_raw_actions = recent_actions_list_refetch[-current_model_context_length:]
                     print(f"Re-fetched context. {len(live_context_raw_actions)} actions loaded.")
                     if len(live_context_raw_actions) < current_model_context_length:
-                        continue # Skip if still not enough
+                        print("Still not enough actions after refetch. Skipping iteration.")
+                        time.sleep(args.next_tx_poll_interval) # Wait before trying again or next cycle
+                        continue 
                 else:
-                    print("Failed to re-fetch context.")
+                    print("Failed to re-fetch context during iteration. Skipping iteration.")
+                    time.sleep(args.next_tx_poll_interval)
                     continue
             except Exception as e_refetch:
-                print(f"Error re-fetching context: {e_refetch}")
+                print(f"Error re-fetching context: {e_refetch}. Skipping iteration.")
+                time.sleep(args.next_tx_poll_interval)
                 continue
 
-
-        # a. Preprocess current context
         print(f"Preprocessing sequence of {len(live_context_raw_actions)} actions for prediction...")
         try:
             processed_sequence = preprocess_sequence_for_inference(
                 live_context_raw_actions, scaler, all_mappings, model_config
             )
         except Exception as e_preprocess:
-            print(f"Error during preprocessing: {e_preprocess}. Skipping prediction.")
-            # Potentially log the problematic context:
+            print(f"Error during preprocessing: {e_preprocess}. Skipping prediction for this iteration.")
+            # Log problematic context for debugging if needed
             # print("Problematic context:", json.dumps(live_context_raw_actions, indent=2))
+            # Attempt to recover by removing the oldest action and trying in the next iteration
+            if live_context_raw_actions:
+                live_context_raw_actions.pop(0)
+                print("Removed oldest action from context due to preprocessing error. Will try again next iteration.")
             time.sleep(args.next_tx_poll_interval)
-            live_context_raw_actions.pop(0) # Remove oldest to try to recover
-            print("Removed oldest action from context due to preprocessing error.")
             continue
 
-
-        # b. Get prediction from model
         print("Making prediction for the next transaction...")
         raw_model_output = predict_single_step(model, processed_sequence, device)
 
-        # c. Decode prediction
         print("Decoding prediction...")
-        predicted_transaction_decoded, raw_prediction_details = decode_prediction(
-            raw_model_output, scaler, all_mappings, model_config
+        predicted_transaction_decoded, _ = decode_prediction(
+            raw_model_output, scaler, all_mappings, model_config, model=model
         )
         
-        print("\\nPredicted Next Transaction:")
-        # Basic print, can be enhanced
-        for key, value in predicted_transaction_decoded.items():
-            print(f"  {key}: {value}")
+        print("Reconstructing predicted transaction to Midgard-like format...")
+        reconstructed_predicted_tx = reconstruct_to_midgard_format(
+            predicted_transaction_decoded, model_config, all_mappings, scaler
+        )
 
-        # d. Wait and poll for the actual next transaction
-        last_known_tx_timestamp = int(live_context_raw_actions[-1].get('date', 0))
-        print(f"\\nWaiting for the actual next transaction (after timestamp {last_known_tx_timestamp})...")
+        print("\nPredicted Next Transaction (Reconstructed Midgard-like format):")
+        print(json.dumps(reconstructed_predicted_tx, indent=2, default=str))
+
+        last_known_tx_timestamp = 0
+        if live_context_raw_actions: # Ensure context is not empty
+            last_known_tx_timestamp = int(live_context_raw_actions[-1].get('date', 0))
+            print(f"\nWaiting for the actual next transaction (after timestamp {last_known_tx_timestamp})...")
         
         actual_next_transaction = None
         poll_attempts = 0
-        max_poll_attempts = args.max_poll_attempts_next_tx # Add this arg later
+        # Ensure max_poll_attempts_next_tx is defined in args or use a default
+        max_polls = getattr(args, 'max_poll_attempts_next_tx', 12) 
 
-        while not actual_next_transaction and poll_attempts < max_poll_attempts:
+        while not actual_next_transaction and poll_attempts < max_polls:
             poll_attempts += 1
-            print(f"  Polling attempt {poll_attempts}/{max_poll_attempts}...")
+            print(f"  Polling attempt {poll_attempts}/{max_polls}...")
             try:
-                # Fetch a small number of recent actions, hoping the next one is there
-                # Offset 0 always gets the very latest.
-                raw_candidate_response = fetch_recent_maya_actions(limit=10, offset=0) 
+                candidate_limit = 10 # Fetch a few candidates
+                raw_candidate_response = fetch_recent_maya_actions(limit=candidate_limit, offset=0) 
                 if raw_candidate_response and 'actions' in raw_candidate_response and raw_candidate_response['actions']:
                     candidate_actions_list = raw_candidate_response['actions']
-                    candidate_actions_list.sort(key=lambda x: int(x.get('date', 0))) # Sort oldest to newest
+                    candidate_actions_list.sort(key=lambda x: int(x.get('date', 0))) 
+                    
                     for action in candidate_actions_list:
                         action_ts = int(action.get('date', 0))
-                        # We need an action that is strictly newer than our last known
-                        # And also ensure it's not one we already have (e.g. by checking txID if available)
-                        # For simplicity now, just timestamp. A robust check would use txID.
-                        # Midgard timestamps are in nanoseconds, Python time.time() is seconds. Be careful with direct comparison.
-                        # Midgard action 'date' is unix timestamp * 1e9 (nanoseconds)
                         if action_ts > last_known_tx_timestamp:
-                            # Check if we already processed this one by looking at its txID (if available)
-                            # or a combination of date and type to avoid duplicates from polling.
-                            # This basic check helps if the API returns the same "latest" for a bit.
                             is_new = True
-                            action_txid = action.get('in', [{}])[0].get('txID', action.get('out', [{}])[0].get('txID', str(action_ts)))
+                            # Robust check using txID if available
+                            action_txid = None
+                            in_txs_action = action.get('in', [])
+                            out_txs_action = action.get('out', [])
+
+                            if in_txs_action and isinstance(in_txs_action, list) and len(in_txs_action) > 0 and isinstance(in_txs_action[0], dict):
+                                action_txid = in_txs_action[0].get('txID')
+                            if not action_txid and out_txs_action and isinstance(out_txs_action, list) and len(out_txs_action) > 0 and isinstance(out_txs_action[0], dict):
+                                action_txid = out_txs_action[0].get('txID')
+                            if not action_txid: # Fallback if no txID found in 'in' or 'out'
+                                action_txid = str(action_ts)
+
                             for seen_action in live_context_raw_actions:
-                                seen_txid = seen_action.get('in', [{}])[0].get('txID', seen_action.get('out', [{}])[0].get('txID', str(seen_action.get('date',0))))
+                                seen_txid = None
+                                in_txs_seen = seen_action.get('in', [])
+                                out_txs_seen = seen_action.get('out', [])
+
+                                if in_txs_seen and isinstance(in_txs_seen, list) and len(in_txs_seen) > 0 and isinstance(in_txs_seen[0], dict):
+                                    seen_txid = in_txs_seen[0].get('txID')
+                                if not seen_txid and out_txs_seen and isinstance(out_txs_seen, list) and len(out_txs_seen) > 0 and isinstance(out_txs_seen[0], dict):
+                                    seen_txid = out_txs_seen[0].get('txID')
+                                if not seen_txid: # Fallback for seen_action
+                                    seen_txid = str(seen_action.get('date',0))
+                                
                                 if action_txid and seen_txid and action_txid == seen_txid:
                                     is_new = False
                                     break
-                                if not action_txid and not seen_txid and int(action.get('date',0)) == int(seen_action.get('date',0)) and action.get('type') == seen_action.get('type'): # Fallback if no txID
+                                # Fallback if no txID, compare timestamp and type (less robust)
+                                if not action_txid and not seen_txid and int(action.get('date',0)) == int(seen_action.get('date',0)) and action.get('type') == seen_action.get('type'): 
                                     is_new = False
                                     break
                             
@@ -884,200 +1075,97 @@ def run_next_transaction_prediction(args, model, scaler, model_config, device):
 
             except Exception as e_poll:
                 print(f"Error during MayaChain polling: {e_poll}")
-                time.sleep(args.next_tx_poll_interval) # Wait before retrying
+                time.sleep(args.next_tx_poll_interval) 
         
         if not actual_next_transaction:
-            print(f"Failed to fetch the actual next transaction after {max_poll_attempts} attempts. Skipping comparison for this iteration.")
-            # To avoid getting stuck, we might just try to predict again with the same context
-            # or advance the context artificially if this happens too often. For now, just continue.
-            time.sleep(args.next_tx_poll_interval) # Wait before next prediction cycle
+            print(f"Failed to fetch the actual next transaction after {max_polls} attempts. Skipping comparison for this iteration.")
+            # Optional: Try to advance context or wait longer before next major prediction cycle
+            time.sleep(args.next_tx_poll_interval * 2) # Wait a bit longer if we missed one
             continue
 
-        # e. Print actual and compare (placeholder for detailed comparison)
-        print("\\nActual Next Transaction:")
-        # Basic print
-        # Convert actual_next_transaction to a more comparable format if needed,
-        # e.g., by running it through a simplified version of preprocess_single_action_for_inference
-        # to get its raw values aligned with what feature_processing_details expects.
-        # For now, we'll extract directly or use a helper.
+        print("\nActual Next Transaction (Raw Midgard format):")
+        print(json.dumps(actual_next_transaction, indent=2, default=str))
+
+        # --- Comparison Logic (Placeholder for now, to be detailed) ---
+        print("\n--- Comparison (Predicted vs Actual) ---")
+        # Detailed comparison will involve comparing fields from reconstructed_predicted_tx
+        # with actual_next_transaction. This might require some normalization or selective field comparison.
+        # For example, compare 'type', 'status', key coins and amounts, key metadata fields.
         
-        actual_tx_simple_dict = {k: v for k, v in actual_next_transaction.items() if not isinstance(v, (dict, list))}
-        actual_tx_simple_dict['metadata'] = actual_next_transaction.get('meta') # Add metadata separately for easier access
-        actual_tx_simple_dict['in_data'] = actual_next_transaction.get('in')
-        actual_tx_simple_dict['out_data'] = actual_next_transaction.get('out')
+        # Example: Compare type and status
+        predicted_type = reconstructed_predicted_tx.get('type')
+        actual_type = actual_next_transaction.get('type')
+        print(f"  Type: Predicted='{predicted_type}', Actual='{actual_type}' ({'MATCH' if predicted_type == actual_type else 'MISMATCH'})")
 
-        print(json.dumps(actual_tx_simple_dict, indent=2, default=str))
+        predicted_status = reconstructed_predicted_tx.get('status')
+        actual_status = actual_next_transaction.get('status')
+        print(f"  Status: Predicted='{predicted_status}', Actual='{actual_status}' ({'MATCH' if predicted_status == actual_status else 'MISMATCH'})")
 
+        # Compare primary in-coin asset and amount (if present)
+        # This needs careful handling of list structures and potential missing fields
+        try:
+            pred_in_coin_asset = reconstructed_predicted_tx.get('in', [{}])[0].get('coins', [{}])[0].get('asset')
+            act_in_coin_asset = actual_next_transaction.get('in', [{}])[0].get('coins', [{}])[0].get('asset')
+            print(f"  In-Coin Asset: Predicted='{pred_in_coin_asset}', Actual='{act_in_coin_asset}' ({'MATCH' if pred_in_coin_asset == act_in_coin_asset else 'MISMATCH'})")
+            
+            pred_in_coin_amount = int(reconstructed_predicted_tx.get('in', [{}])[0].get('coins', [{}])[0].get('amount', '0'))
+            act_in_coin_amount = int(actual_next_transaction.get('in', [{}])[0].get('coins', [{}])[0].get('amount', '0'))
+            amount_diff = abs(pred_in_coin_amount - act_in_coin_amount)
+            print(f"  In-Coin Amount: Predicted='{pred_in_coin_amount}', Actual='{act_in_coin_amount}' (Diff: {amount_diff})")
+        except (IndexError, TypeError, ValueError) as e_comp_in:
+            print(f"  Could not compare in-coin details: {e_comp_in}")
 
-        print("\\n--- Comparison (Predicted vs Actual) ---")
-        
-        feature_output_info_list = model_config.get('feature_output_info_model', [])
-        feature_processing_details = model_config.get('feature_processing_details', {})
+        # Compare primary out-coin asset and amount (if present)
+        try:
+            pred_out_coin_asset = reconstructed_predicted_tx.get('out', [{}])[0].get('coins', [{}])[0].get('asset')
+            act_out_coin_asset = actual_next_transaction.get('out', [{}])[0].get('coins', [{}])[0].get('asset')
+            print(f"  Out-Coin Asset: Predicted='{pred_out_coin_asset}', Actual='{act_out_coin_asset}' ({'MATCH' if pred_out_coin_asset == act_out_coin_asset else 'MISMATCH'})")
 
-        if not feature_output_info_list or not feature_processing_details:
-            print("  Cannot perform detailed comparison: model_config missing feature_output_info_model or feature_processing_details.")
-        else:
-            for f_info in feature_output_info_list:
-                feat_name = f_info['name']
-                feat_type = f_info['type']
-                pred_val_decoded = predicted_transaction_decoded.get(feat_name)
-                
-                # Get actual value - this requires mapping feat_name to the raw JSON structure
-                # We need to use feature_processing_details[feat_name]['raw_json_path'] etc.
-                # This is similar to what preprocess_single_action_for_inference does to get raw values.
-                
-                actual_raw_val = None
-                f_detail_for_actual = feature_processing_details.get(feat_name)
-                
-                if f_detail_for_actual:
-                    raw_json_path_str = f_detail_for_actual.get('raw_json_path', '')
-                    # Simplified extraction for actual value - mirrors parts of preprocess_single_action_for_inference
-                    current_val_actual = actual_next_transaction
-                    is_present_actual = True
-                    try:
-                        if raw_json_path_str.startswith('[') and raw_json_path_str.endswith(']'):
-                            path_list_actual = json.loads(raw_json_path_str.replace("'", "\"")) # Corrected: no need for extra backslash here
-                            for key_or_idx_actual in path_list_actual:
-                                if isinstance(key_or_idx_actual, str):
-                                    if isinstance(current_val_actual, dict): # Check if current_val_actual is a dict
-                                        current_val_actual = current_val_actual.get(key_or_idx_actual)
-                                    else: # If not a dict, path cannot be traversed further
-                                        is_present_actual = False; break
-                                elif isinstance(key_or_idx_actual, int):
-                                    if isinstance(current_val_actual, list) and 0 <= key_or_idx_actual < len(current_val_actual):
-                                        current_val_actual = current_val_actual[key_or_idx_actual]
-                                    else: 
-                                        is_present_actual = False; break
-                                else: 
-                                    is_present_actual = False; break
-                                if current_val_actual is None: 
-                                    is_present_actual = False; break
-                            if is_present_actual: actual_raw_val = current_val_actual
-                        
-                        elif 'action.type' in raw_json_path_str: # Logic flags
-                             action_type_actual = actual_next_transaction.get('type','').lower()
-                             raw_col_name_actual = f_detail_for_actual.get('raw_column_name','').lower()
-                             if 'meta_is_swap_flag' in raw_col_name_actual: actual_raw_val = 1 if action_type_actual == 'swap' else 0
-                             elif 'meta_is_addliquidity_flag' in raw_col_name_actual: actual_raw_val = 1 if action_type_actual == 'addliquidity' else 0
-                             # ... other logic flags for meta_is_withdraw_flag, meta_is_refund_flag etc.
-                             elif 'meta_is_withdraw_flag' in raw_col_name_actual: actual_raw_val = 1 if action_type_actual == 'withdraw' else 0
-                             elif 'meta_is_refund_flag' in raw_col_name_actual: actual_raw_val = 1 if action_type_actual == 'refund' else 0
-                             elif 'meta_is_thorname_flag' in raw_col_name_actual: actual_raw_val = 1 if action_type_actual == 'thorname' else 0 # Example for thorname
-                             else: actual_raw_val = None 
-                        # else: actual_raw_val remains None if path string is not list-like or known logic string
+            pred_out_coin_amount = int(reconstructed_predicted_tx.get('out', [{}])[0].get('coins', [{}])[0].get('amount', '0'))
+            act_out_coin_amount = int(actual_next_transaction.get('out', [{}])[0].get('coins', [{}])[0].get('amount', '0'))
+            amount_diff_out = abs(pred_out_coin_amount - act_out_coin_amount)
+            print(f"  Out-Coin Amount: Predicted='{pred_out_coin_amount}', Actual='{act_out_coin_amount}' (Diff: {amount_diff_out})")
+        except (IndexError, TypeError, ValueError) as e_comp_out:
+            print(f"  Could not compare out-coin details: {e_comp_out}")
 
-                    except Exception as e_extract_actual: 
-                        print(f"      Warning: Error extracting actual_raw_val for {feat_name} using path '{raw_json_path_str}': {e_extract_actual}")
-                        actual_raw_val = None 
-                                   
-                print(f"  Feature: {feat_name} (Type: {feat_type})")
-                
-                if feat_type == 'id_map' or feat_type == 'hash_cat':
-                    pred_id_str = str(pred_val_decoded) # Decoded already gives string for id_map, ID for hash_cat
-                    
-                    # For actual, we need to get the mapped ID from raw value
-                    actual_id = None
-                    if f_detail_for_actual:
-                        if feat_type == 'id_map':
-                            mapping_file = f_detail_for_actual['mapping_file']
-                            current_mapping_actual = all_mappings.get(mapping_file, {})
-                            unknown_token_actual = model_config.get('unknown_token_str', 'UNKNOWN')
-                            no_asset_token_actual = model_config.get('no_asset_str', 'NO_ASSET')
-                            pad_token_actual = model_config.get('pad_token_str', 'PAD')
+        # Add more detailed comparison for metadata based on type, etc.
+        if predicted_type == 'swap' and actual_type == 'swap':
+            pred_meta_swap = reconstructed_predicted_tx.get('metadata', {}).get('swap', {})
+            act_meta_swap = actual_next_transaction.get('metadata', {}).get('swap', {})
+            
+            pred_slip = pred_meta_swap.get('swapSlip')
+            act_slip = act_meta_swap.get('swapSlip') # Midgard uses BPS string, convert to int for comparison if needed
+            try: # Convert to int for comparison, handle potential errors if None or not string int
+                pred_slip_int = int(pred_slip) if pred_slip is not None else None
+                act_slip_int = int(act_slip) if act_slip is not None else None
+                slip_match = (pred_slip_int == act_slip_int)
+                print(f"  Swap Slip (BPS): Predicted='{pred_slip_int}', Actual='{act_slip_int}' ({'MATCH' if slip_match else 'MISMATCH'})")
+            except (ValueError, TypeError):
+                print(f"  Swap Slip (BPS): Predicted='{pred_slip}', Actual='{act_slip}' (Could not convert to int for direct comparison)")
 
-                            val_to_map_actual = str(actual_raw_val) if actual_raw_val is not None else unknown_token_actual
-                            if 'asset' in feat_name.lower() and (actual_raw_val is None or str(actual_raw_val) == no_asset_token_actual):
-                                val_to_map_actual = pad_token_actual
-                            actual_id = current_mapping_actual.get(val_to_map_actual, current_mapping_actual.get(unknown_token_actual))
-                        
-                        elif feat_type == 'hash_cat':
-                            hash_seed_actual = f_detail_for_actual['hash_seed']
-                            hash_bins_actual = f_detail_for_actual['hash_bins']
-                            pad_id_actual = f_detail_for_actual['pad_id']
-                            no_address_token = model_config.get('no_address_str', 'NO_ADDRESS')
-                            if actual_raw_val is None or str(actual_raw_val) == '' or str(actual_raw_val) == no_address_token:
-                                actual_id = pad_id_actual
-                            else:
-                                actual_id = mmh3.hash(str(actual_raw_val), seed=hash_seed_actual) % hash_bins_actual
-                    
-                    actual_id_str = str(actual_id) if actual_id is not None else "N/A (raw or map error)"
-                    match = "MATCH" if pred_id_str == actual_id_str else "MISMATCH"
-                    print(f"    Predicted: {pred_id_str}, Actual ID: {actual_id_str} ({match})")
-                    
-                    # Show probability for actual ID if available in raw_prediction_details
-                    if feat_name in raw_prediction_details and isinstance(raw_prediction_details[feat_name], dict) and 'logits' in raw_prediction_details[feat_name] and actual_id is not None:
-                        logits = raw_prediction_details[feat_name]['logits']
-                        probs = torch.softmax(torch.tensor(logits), dim=-1).numpy()
-                        if 0 <= actual_id < len(probs):
-                            print(f"      Probability for actual ID ({actual_id}): {probs[actual_id]:.4f}")
-                        else:
-                            print(f"      Actual ID ({actual_id}) out of range for probability calculation (max vocab index: {len(probs)-1}).")
-                    elif feat_name in raw_prediction_details and actual_id is None:
-                        print(f"      Cannot show probability for actual ID as actual_id could not be determined.")
+            pred_liq_fee = pred_meta_swap.get('liquidityFee')
+            act_liq_fee = act_meta_swap.get('liquidityFee')
+            try:
+                pred_liq_fee_int = int(pred_liq_fee) if pred_liq_fee is not None else None
+                act_liq_fee_int = int(act_liq_fee) if act_liq_fee is not None else None
+                liq_fee_diff = abs(pred_liq_fee_int - act_liq_fee_int) if pred_liq_fee_int is not None and act_liq_fee_int is not None else 'N/A'
+                print(f"  Swap Liquidity Fee: Predicted='{pred_liq_fee_int}', Actual='{act_liq_fee_int}' (Diff: {liq_fee_diff})")
+            except (ValueError, TypeError):
+                print(f"  Swap Liquidity Fee: Predicted='{pred_liq_fee}', Actual='{act_liq_fee}' (Could not convert to int for direct comparison)")
 
-
-                elif feat_type == 'binary_flag':
-                    pred_flag = int(pred_val_decoded)
-                    actual_flag = None
-                    if actual_raw_val is not None: # Assumes actual_raw_val is already 0 or 1 for flags
-                        actual_flag = int(actual_raw_val)
-                    
-                    actual_flag_str = str(actual_flag) if actual_flag is not None else "N/A"
-                    match = "MATCH" if pred_flag == actual_flag else "MISMATCH"
-                    print(f"    Predicted: {pred_flag}, Actual: {actual_flag_str} ({match})")
-
-                elif feat_type == 'numerical_scaled':
-                    pred_numerical_unscaled = pred_val_decoded # decode_prediction already unscaled this
-                    
-                    # For actual, we need to get raw, then normalize, then scale (or just get the final scaled value if we were to re-preprocess)
-                    # This is tricky. For a simpler comparison here, let's just show the raw actual.
-                    # A full comparison would re-run the exact preprocessing steps on actual_raw_val.
-                    actual_val_for_comp = "N/A (raw extract error)"
-                    if actual_raw_val is not None:
-                        try:
-                            actual_val_for_comp = float(actual_raw_val)
-                            # Optional: if we want to compare unscaled pred vs un-normalized actual
-                            norm_factor_str = f_detail_for_actual.get('normalization_factor', "None")
-                            if norm_factor_str != "None":
-                                # predicted is already un-normalized by decode_prediction
-                                pass # pred_numerical_unscaled is already at this stage
-                            
-                            print(f"    Predicted (unscaled, un-normalized): {pred_numerical_unscaled:.4f}, Actual (raw): {actual_val_for_comp:.4f}")
-                            if isinstance(pred_numerical_unscaled, (int, float)) and isinstance(actual_val_for_comp, (int, float)):
-                                diff = abs(pred_numerical_unscaled - actual_val_for_comp)
-                                print(f"      Absolute Difference (Pred_unscaled vs Actual_raw): {diff:.4f}")
-
-                        except ValueError:
-                             print(f"    Predicted (unscaled, un-normalized): {pred_numerical_unscaled:.4f}, Actual (raw): {actual_raw_val} (cannot convert actual to float for diff)")
-                    else:
-                        print(f"    Predicted (unscaled, un-normalized): {pred_numerical_unscaled:.4f}, Actual (raw): N/A")
-                else:
-                    print(f"    Predicted: {pred_val_decoded}, Actual: (comparison not implemented for this type)")
-        
-        # For numericals, using the 'raw_prediction_details' from decode_prediction might be useful
-        # as it can contain raw logits or scaled values before final transformations.
-
-        # Example of accessing a specific predicted numerical (scaled) vs actual (raw, needs preprocessing for direct comparison)
-        # if 'meta_swap_swapSlip_bps_val_scaled' in predicted_transaction_decoded and 'meta' in actual_next_transaction and 'swap' in actual_next_transaction['meta']:
-        #     predicted_slip_scaled = predicted_transaction_decoded['meta_swap_swapSlip_bps_val_scaled']
-        #     actual_slip_raw = actual_next_transaction['meta']['swap'].get('swapSlip') # This is in BPS (0-10000)
-        #     # To compare, actual_slip_raw would need to go through the same scaling as in preprocessing
-        #     print(f"    Swap Slip (Example): Predicted (scaled): {predicted_slip_scaled}, Actual (raw BPS): {actual_slip_raw}")
-
-
-        # f. Update context: Add actual, remove oldest
         live_context_raw_actions.append(actual_next_transaction)
         if len(live_context_raw_actions) > current_model_context_length:
             live_context_raw_actions.pop(0)
         
         print(f"Context updated. Newest action: Date {live_context_raw_actions[-1].get('date')}, Type: {live_context_raw_actions[-1].get('type')}")
 
-        # g. Pause if not the last prediction
         if i < args.num_predictions_to_make - 1:
-            print(f"Waiting {args.inter_prediction_delay_seconds}s before next prediction cycle...") # Add this arg
-            time.sleep(args.inter_prediction_delay_seconds)
+            # Ensure inter_prediction_delay_seconds is defined in args or use a default
+            delay_seconds = getattr(args, 'inter_prediction_delay_seconds', 5)
+            print(f"Waiting {delay_seconds}s before next prediction cycle...")
+            time.sleep(delay_seconds)
 
-    print("\\n--- Next Transaction Prediction Mode Finished ---")
+    print("\n--- Next Transaction Prediction Mode Finished ---")
 
 
 def reconstruct_to_midgard_format(flat_decoded_tx, model_config, all_mappings, scaler):
@@ -1120,63 +1208,18 @@ def reconstruct_to_midgard_format(flat_decoded_tx, model_config, all_mappings, s
             reconstructed_tx['status'] = "unknown" # Midgard uses lowercase 'unknown'
 
     # --- Process Numerical Features --- 
-    numerical_values_to_unscale = {}
-    numerical_feature_final_names_map = {} # Maps intermediate_name -> final_feature_name
-
+    # Values in flat_decoded_tx for numerical features are already unscaled and un-normalized
+    # by the decode_prediction function. We directly use them.
+    unscaled_numericals = {}
     for f_name, f_details in feature_processing_details.items():
         if f_details['type'] == 'numerical_scaled':
+            # f_name is the final feature name (e.g., 'action_date_unix_scaled')
+            # flat_decoded_tx contains these directly as keys with their final values.
             if f_name in flat_decoded_tx:
-                intermediate_name = f_details['intermediate_column_name']
-                numerical_values_to_unscale[intermediate_name] = flat_decoded_tx[f_name]
-                numerical_feature_final_names_map[intermediate_name] = f_name 
-            # else: The feature might not have been predicted or was PAD, handle later or rely on scaler default
-
-    unscaled_numericals = {}
-    if numerical_values_to_unscale:
-        scaler_feature_names_in_order = []
-        if hasattr(scaler, 'feature_names_in_') and scaler.feature_names_in_ is not None:
-            scaler_feature_names_in_order = list(scaler.feature_names_in_)
-        elif model_config.get('scaler_features_names_in_order'): # Fallback to config if available
-            scaler_feature_names_in_order = model_config['scaler_features_names_in_order']
-        
-        if not scaler_feature_names_in_order:
-            print("Warning in reconstruct: Scaler feature names order not found. Numerical reconstruction might be incorrect.")
-            # Attempt to use keys from numerical_values_to_unscale as a last resort, but order is not guaranteed
-            scaler_feature_names_in_order = list(numerical_values_to_unscale.keys())
-
-        # Prepare a row for inverse_transform, ensuring all expected scaler features are present and in order
-        row_for_inverse_transform = []
-        for s_name in scaler_feature_names_in_order:
-            row_for_inverse_transform.append(numerical_values_to_unscale.get(s_name, 0.0)) # Default to 0.0 if missing for some reason
-        
-        try:
-            unscaled_row = scaler.inverse_transform(np.array(row_for_inverse_transform).reshape(1, -1))[0]
-            temp_unscaled_dict = {name: val for name, val in zip(scaler_feature_names_in_order, unscaled_row)}
-
-            # Apply inverse normalization
-            for intermediate_name, unscaled_val in temp_unscaled_dict.items():
-                final_feature_name = numerical_feature_final_names_map.get(intermediate_name)
-                if final_feature_name and final_feature_name in feature_processing_details:
-                    f_detail_for_norm = feature_processing_details[final_feature_name]
-                    norm_factor_str = f_detail_for_norm.get('normalization_factor', "None")
-                    final_value = unscaled_val
-                    if norm_factor_str != "None":
-                        try: 
-                            norm_factor = float(norm_factor_str)
-                            if norm_factor != 0: # Avoid division by zero, though should not happen for factors
-                                final_value *= norm_factor # Inverse of division is multiplication
-                        except ValueError:
-                            print(f"Warning: Could not parse normalization_factor '{norm_factor_str}' for {final_feature_name}")
-                    unscaled_numericals[final_feature_name] = final_value
-                else:
-                    # This intermediate name from scaler might not map back to a final feature if config is misaligned
-                    unscaled_numericals[intermediate_name] = unscaled_val # Store with intermediate name as fallback
-        except Exception as e_unscale:
-            print(f"Error during inverse_transform/un-normalization in reconstruct: {e_unscale}. Numerical values will be raw.")
-            # Fallback: use the direct values from flat_decoded_tx for numericals if unscaling fails
-            for f_name_iter, f_details_iter in feature_processing_details.items():
-                if f_details_iter['type'] == 'numerical_scaled' and f_name_iter in flat_decoded_tx:
-                    unscaled_numericals[f_name_iter] = flat_decoded_tx[f_name_iter] 
+                unscaled_numericals[f_name] = flat_decoded_tx[f_name]
+            # If a numerical feature was not in flat_decoded_tx (e.g., PAD or not predicted),
+            # it won't be in unscaled_numericals. Subsequent .get() calls will handle this.
+    # The original complex block for inverse scaling and un-normalizing is removed.
 
     # Now populate reconstructed_tx with these unscaled_numericals
     # Date and Height
@@ -1221,8 +1264,8 @@ def reconstruct_to_midgard_format(flat_decoded_tx, model_config, all_mappings, s
            asset_str != model_config.get('pad_token_str', 'PAD') and \
            asset_str != model_config.get('no_asset_str', 'NO_ASSET'):
             # Get the unscaled, un-normalized amount
-            amount_val = unscaled_numericals.get('in_coin1_amount_norm_scaled')
-            amount_str = str(int(amount_val)) if amount_val is not None else "0"
+            amount_val = unscaled_numericals.get('in_coin1_amount_atomic_scaled') # Corrected key
+            amount_str = str(amount_val) if amount_val is not None else "0"
             in_tx_obj["coins"].append({"asset": asset_str, "amount": amount_str})
     
     if 'in_address_hash_id' in flat_decoded_tx:
@@ -1251,8 +1294,8 @@ def reconstruct_to_midgard_format(flat_decoded_tx, model_config, all_mappings, s
         if asset_str and "UNKNOWN_ID" not in asset_str and "MAPPING_FILE_NOT_FOUND_ID" not in asset_str and \
            asset_str != model_config.get('pad_token_str', 'PAD') and \
            asset_str != model_config.get('no_asset_str', 'NO_ASSET'):
-            amount_val = unscaled_numericals.get('out_coin1_amount_norm_scaled')
-            amount_str = str(int(amount_val)) if amount_val is not None else "0"
+            amount_val = unscaled_numericals.get('out_coin1_amount_atomic_scaled') # Corrected key
+            amount_str = str(amount_val) if amount_val is not None else "0"
             out_tx_obj["coins"].append({"asset": asset_str, "amount": amount_str})
     if 'out_address_hash_id' in flat_decoded_tx:
         out_addr_hash_id = flat_decoded_tx['out_address_hash_id']
@@ -1266,8 +1309,8 @@ def reconstruct_to_midgard_format(flat_decoded_tx, model_config, all_mappings, s
     if flat_decoded_tx.get('meta_is_swap_flag') == 1:
         swap_meta = {}
         # LiquidityFee (numerical)
-        lf_val = unscaled_numericals.get('meta_swap_liquidityFee_norm_scaled')
-        if lf_val is not None: swap_meta["liquidityFee"] = str(int(lf_val))
+        lf_val = unscaled_numericals.get('meta_swap_liquidityFee_atomic_scaled') # Corrected key
+        if lf_val is not None: swap_meta["liquidityFee"] = str(lf_val)
         
         # TargetAsset (id_map) - should be string from decode_prediction
         ta_str = flat_decoded_tx.get('meta_swap_target_asset_id')
@@ -1280,32 +1323,35 @@ def reconstruct_to_midgard_format(flat_decoded_tx, model_config, all_mappings, s
 
         # swapSlip (numerical, bps)
         slip_val = unscaled_numericals.get('meta_swap_swapSlip_bps_val_scaled')
-        if slip_val is not None: swap_meta["swapSlip"] = str(int(slip_val)) # BPS are usually int
+        if slip_val is not None: swap_meta["swapSlip"] = str(slip_val) # Changed (Midgard expects string for BPS too)
 
         # networkFees (array of coin objects)
         # Simplified: assuming one network fee, meta_swap_networkFee1_asset_id and meta_swap_networkFee1_amount_norm_scaled
         nf_asset_str = flat_decoded_tx.get('meta_swap_networkFee1_asset_id')
-        nf_amount_val = unscaled_numericals.get('meta_swap_networkFee1_amount_norm_scaled')
+        nf_amount_val = unscaled_numericals.get('meta_swap_networkFee1_amount_atomic_scaled') # Corrected key
         if nf_asset_str and "UNKNOWN_ID" not in nf_asset_str and "MAPPING_FILE_NOT_FOUND_ID" not in nf_asset_str and \
            nf_asset_str != model_config.get('pad_token_str', 'PAD') and \
            nf_asset_str != model_config.get('no_asset_str', 'NO_ASSET') and nf_amount_val is not None:
-            swap_meta["networkFees"] = [{"asset": nf_asset_str, "amount": str(int(nf_amount_val))}]
+            swap_meta["networkFees"] = [{"asset": nf_asset_str, "amount": str(nf_amount_val)}]
         
         # Other swap fields like tradeTarget, affiliateAddress, affiliateFee would be added similarly
-        aff_fee_val = unscaled_numericals.get('meta_swap_affiliateFee_norm_scaled')
-        if aff_fee_val is not None and aff_fee_val > 0: # Only include if positive fee
-             swap_meta["affiliateFee"] = str(int(aff_fee_val))
-             aff_addr_hash_id = flat_decoded_tx.get('meta_swap_affiliate_address_hash_id')
-             pad_hash_id_aff = feature_processing_details.get('meta_swap_affiliate_address_hash_id', {}).get('pad_id')
-             if aff_addr_hash_id is not None and aff_addr_hash_id != pad_hash_id_aff:
-                 swap_meta["affiliateAddress"] = f"simulated_affiliate_address_hash_id_{aff_addr_hash_id}"
+        # Check if model_config has a feature for affiliateFee amount, if not, it cannot be reconstructed.
+        # Current model_config (atomic_AUGMENTED) does not have 'meta_swap_affiliateFee_atomic_scaled'.
+        # aff_fee_val = unscaled_numericals.get('meta_swap_affiliateFee_atomic_scaled') # This feature does not exist in config
+        # if aff_fee_val is not None and float(aff_fee_val) > 0:
+        #      swap_meta["affiliateFee"] = str(aff_fee_val)
+        aff_addr_hash_id = flat_decoded_tx.get('meta_swap_affiliate_address_hash_id')
+        pad_hash_id_aff = feature_processing_details.get('meta_swap_affiliate_address_hash_id', {}).get('pad_id')
+        if aff_addr_hash_id is not None and aff_addr_hash_id != pad_hash_id_aff:
+            swap_meta["affiliateAddress"] = f"simulated_affiliate_address_hash_id_{aff_addr_hash_id}"
+            # If affiliate fee were a feature, it would be added here only if address is present
 
         # Streaming parameters
         if flat_decoded_tx.get('meta_swap_is_streaming_flag') == 1:
-            stream_quant_val = unscaled_numericals.get('meta_swap_streaming_quantity_norm_scaled')
-            if stream_quant_val is not None: swap_meta["streamingQuantity"] = str(int(stream_quant_val))
+            stream_quant_val = unscaled_numericals.get('meta_swap_streaming_quantity_atomic_scaled') # Corrected key
+            if stream_quant_val is not None: swap_meta["streamingQuantity"] = str(stream_quant_val)
             stream_count_val = unscaled_numericals.get('meta_swap_streaming_count_val_scaled')
-            if stream_count_val is not None: swap_meta["streamingCount"] = str(int(stream_count_val))
+            if stream_count_val is not None: swap_meta["streamingCount"] = str(stream_count_val)
 
         if swap_meta: # only add if not empty
             reconstructed_tx['metadata']['swap'] = swap_meta
@@ -1314,7 +1360,7 @@ def reconstruct_to_midgard_format(flat_decoded_tx, model_config, all_mappings, s
     elif flat_decoded_tx.get('meta_is_addLiquidity_flag') == 1:
         add_meta = {}
         lu_val = unscaled_numericals.get('meta_addLiquidity_units_val_scaled')
-        if lu_val is not None: add_meta["liquidityUnits"] = str(int(lu_val))
+        if lu_val is not None: add_meta["liquidityUnits"] = str(lu_val) # Changed
         # Add other addLiquidity specific fields if any (e.g. runeAddress, assetAddress if they are separate features)
         if add_meta:
             reconstructed_tx['metadata']['addLiquidity'] = add_meta
@@ -1323,16 +1369,17 @@ def reconstruct_to_midgard_format(flat_decoded_tx, model_config, all_mappings, s
     elif flat_decoded_tx.get('meta_is_withdraw_flag') == 1:
         withdraw_meta = {}
         lu_val_wd = unscaled_numericals.get('meta_withdraw_units_val_scaled')
-        if lu_val_wd is not None: withdraw_meta["liquidityUnits"] = str(int(lu_val_wd))
+        if lu_val_wd is not None: withdraw_meta["liquidityUnits"] = str(lu_val_wd) # Changed
         
         ilp_val = unscaled_numericals.get('meta_withdraw_imp_loss_protection_norm_scaled')
-        if ilp_val is not None: withdraw_meta["ilProtection"] = str(int(ilp_val)) # Impermanent Loss Protection
+        if ilp_val is not None: withdraw_meta["ilProtection"] = str(ilp_val) # Changed
         
         asym_val = unscaled_numericals.get('meta_withdraw_asymmetry_val_scaled')
-        if asym_val is not None: withdraw_meta["asymmetry"] = f"{asym_val:.4f}" # Asymmetry is usually a float 0-1
+        # Asymmetry from decode_prediction is already a formatted string like "0.1234"
+        if asym_val is not None: withdraw_meta["asymmetry"] = str(asym_val) 
         
         basis_pts_val = unscaled_numericals.get('meta_withdraw_basis_points_val_scaled')
-        if basis_pts_val is not None: withdraw_meta["basisPoints"] = str(int(basis_pts_val)) # Percentage of liquidity withdrawn in BPS
+        if basis_pts_val is not None: withdraw_meta["basisPoints"] = str(basis_pts_val) # Changed
 
         # Network fees for withdraw (similar to swap)
         # Assuming wd_networkFee1_asset_id, wd_networkFee1_amount_norm_scaled if these features exist
@@ -1401,7 +1448,7 @@ def run_generative_simulation(args, model, scaler, all_mappings, model_config, d
     generated_transactions_reconstructed = [] # New list for Midgard-like structures
     
     for i in range(args.num_simulation_steps):
-        print(f"\\nSimulation step {i+1}/{args.num_simulation_steps}")
+        print(f"\nSimulation step {i+1}/{args.num_simulation_steps}")
 
         # 2. Predict the next transaction based on the current_processed_sequence
         print("  Generating next simulated transaction...")
@@ -1411,7 +1458,7 @@ def run_generative_simulation(args, model, scaler, all_mappings, model_config, d
         try:
             # Pass all_mappings to decode_prediction as well
             simulated_transaction_decoded, raw_prediction_details_simulation = decode_prediction(
-                raw_model_output, scaler, all_mappings, model_config
+                raw_model_output, scaler, all_mappings, model_config, model=model # Pass model
             )
         except NotImplementedError:
             print("  Exiting simulation due to unimplemented decoding.")
@@ -1505,7 +1552,7 @@ def run_generative_simulation(args, model, scaler, all_mappings, model_config, d
     elif args.output_simulation_file and not generated_transactions_decoded:
         print("No transactions were generated to save.")
 
-    print("\\n--- Generative Simulation Mode Finished ---")
+    print("\n--- Generative Simulation Mode Finished ---")
 
 
 def main():
@@ -1552,7 +1599,7 @@ def main():
 
     # Mode dispatch
     if args.mode == "predict_next":
-        run_next_transaction_prediction(args, model, scaler, model_config, device)
+        run_next_transaction_prediction(args, model, scaler, loaded_all_mappings, model_config, device) # Pass loaded_all_mappings
     elif args.mode == "simulate":
         # Pass all_mappings to run_generative_simulation as it's needed by preprocess_sequence_for_inference called within it
         run_generative_simulation(args, model, scaler, loaded_all_mappings, model_config, device) 

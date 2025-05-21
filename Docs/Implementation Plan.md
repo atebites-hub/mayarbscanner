@@ -99,7 +99,46 @@ The implementation is divided into five phases. The total timeline is flexible, 
 *   **Task 4.8: Integrate Real Maya Protocol Data (FUTURE)**
     *   **Description:** Adapt `src/fetch_realtime_transactions.py` to fetch large-scale raw JSON from Maya Midgard. Implement robust train/validation/test splits using this data. Retrain and re-evaluate the generative model on actual Maya data.
 
-## Phase 5: Deployment and Iteration (Future)
+## Phase 5: Advanced Data Refinement & Model Retraining
+
+**Overarching Goal:** Improve model accuracy and realism by refining the data preprocessing pipeline, particularly for numerical features with diverse scales, and retraining the model with these improvements.
+
+**Task Breakdown & Status:**
+
+*   **Task 5.1: Refine Initial Amount Handling (COMPLETED)**
+    *   **Description:** Ensured raw atomic amounts are correctly converted to numerical types and that decoding in the inference suite correctly applies asset-specific precision for display.
+    *   **Status:** Completed, including updates to `ASSET_PRECISIONS`, `preprocess_ai_data.py` for atomic handling, and `realtime_inference_suite.py` for decoding and reconstruction.
+
+*   **Task 5.2: Implement Per-Asset Scaling for Numerical Amounts (IN PROGRESS)**
+    *   **Description:** Address the issue of global `StandardScaler` distorting predictions for amounts and fees by implementing a per-asset (or asset-class) scaling strategy.
+    *   **Sub-Task 5.2.1: Refactor `src/preprocess_ai_data.py` (TODO)**
+        *   Modify `process_numerical_features_generative` to manage a collection of scalers (`scalers_collection`) stored in a single pickle file. This collection will include:
+            *   Scalers for features that are asset-dependent (e.g., `in_coin1_amount_atomic`, `meta_swap_liquidityFee_atomic`), with a separate `StandardScaler` instance for each significant asset and a fallback scaler.
+            *   Global scalers for features not directly tied to asset value scales (e.g., `meta_swap_swapSlip_bps_val`, `action_date_unix`).
+        *   Implement logic to fit these scalers correctly during `train` mode and apply them during `train` and `test` modes based on asset context.
+    *   **Sub-Task 5.2.2: Update `model_config.json` Generation (TODO)**
+        *   Ensure `feature_processing_details` in `model_config.json` clearly indicates the scaling strategy for each numerical feature (e.g., `scaling_type: 'per_asset'`, `asset_context_column: 'in_coin1_asset_id'`, or `scaling_type: 'global'`).
+    *   **Sub-Task 5.2.3: Refactor `src/realtime_inference_suite.py` (TODO)**
+        *   Update `load_model_and_artifacts` to correctly load and interpret the `scalers_collection` from the scaler pickle file.
+        *   Modify `decode_prediction` to:
+            *   Identify the scaling strategy for each numerical feature from `model_config.json`.
+            *   If 'per_asset', determine the relevant asset string (which must be decoded first).
+            *   Use the appropriate specific scaler (asset-specific, global, or fallback) from `scalers_collection` for the `inverse_transform` operation.
+
+*   **Task 5.3: Retrain Generative Model (TODO - Depends on 5.2)**
+    *   **Description:** After implementing per-asset scaling, run the updated `src/preprocess_ai_data.py` to generate new training artifacts.
+    *   Train the generative model using `src/train_model.py` with the new data and artifacts.
+
+*   **Task 5.4: Evaluate Retrained Model (TODO - Depends on 5.3)**
+    *   **Description:** Evaluate the newly trained model using `src/evaluate_model_generative.py` to assess the impact of per-asset scaling.
+
+*   **Task 5.5: Test Realtime Inference with Retrained Model (FUTURE - Depends on 5.3)**
+    *   **Description:** Conduct thorough testing of `src/realtime_inference_suite.py` (both simulation and live prediction modes) using the model trained with per-asset scaling.
+
+*   **Task 5.6: Implement Proper Train/Test Split & Re-evaluate Model (FUTURE)**
+    *   **Description:** (As previously defined) Modify `src/preprocess_ai_data.py` for distinct train/test `.npz` files, retrain on train-only, and evaluate on test-only for true generalization score.
+
+## Phase 6: Deployment and Iteration (Future)
 -   Deploying the refined system.
 -   Developing strategies based on predicted sequences (arbitrage, optimal routing, etc.).
 -   Establishing continuous monitoring, retraining, and iteration cycles.
