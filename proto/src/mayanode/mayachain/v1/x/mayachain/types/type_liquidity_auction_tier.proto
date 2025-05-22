@@ -1,0 +1,11 @@
+syntax = "proto3";
+package types;
+
+option go_package = "gitlab.com/mayachain/mayanode/x/mayachain/types";
+
+import "gogoproto/gogo.proto";
+
+message LiquidityAuctionTier {
+  string address = 1 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.Address"];
+  int64 tier = 2;
+}

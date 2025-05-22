@@ -6,7 +6,16 @@ torch
 torchaudio
 torchvision
 pycoingecko
-requests
+requests==2.32.3
 matplotlib
 seaborn 
 mmh3 
+python-dateutil==2.9.0.post0
+virtualenv
+
+
+# Add other dependencies here if needed 
+# betterproto[compiler]==1.2.5
+betterproto[compiler]==2.0.0b7
+grpclib==0.4.8
+bech32 # For converting address bytes to human-readable format 

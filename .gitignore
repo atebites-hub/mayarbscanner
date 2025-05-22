@@ -178,3 +178,7 @@ evaluation_results_generative/
 models/
 .DS_Store
 src/.DS_Store
+
+# Local protoc compiler and sample output files
+bin/
+decoded_tx_sample.json

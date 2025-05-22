@@ -1,0 +1,293 @@
+syntax = "proto3";
+package types;
+
+option go_package = "gitlab.com/mayachain/mayanode/x/mayachain/types";
+
+import "mayachain/v1/common/common.proto";
+import "mayachain/v1/x/mayachain/types/type_pool.proto";
+import "mayachain/v1/x/mayachain/types/type_reserve_contributor.proto";
+import "mayachain/v1/x/mayachain/types/type_tx_out.proto";
+import "gogoproto/gogo.proto";
+
+message PoolMod {
+  common.Asset asset = 1 [(gogoproto.nullable) = false];
+  string cacao_amt = 2 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  bool cacao_add = 3;
+  string asset_amt = 4 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  bool asset_add = 5;
+}
+
+message EventStreamingSwap {
+  string tx_id = 1 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.TxID", (gogoproto.customname) = "TxID"];
+  uint64 interval = 2;
+  uint64 quantity = 3;
+  uint64 count = 4;
+  int64 last_height = 5;
+  string trade_target = 6 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  common.Coin deposit = 7 [(gogoproto.nullable) = false];
+  common.Coin in = 8 [(gogoproto.nullable) = false];
+  common.Coin out = 9 [(gogoproto.nullable) = false];
+  repeated uint64 failed_swaps = 10;
+  repeated string failed_swap_reasons = 11;
+}
+
+message EventSwap {
+  common.Asset pool = 1 [(gogoproto.nullable) = false];
+  string swap_target = 2 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string swap_slip = 3 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string liquidity_fee = 4 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string liquidity_fee_in_cacao = 5 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  common.Tx in_tx = 6 [(gogoproto.nullable) = false];
+  common.Tx out_txs = 7 [(gogoproto.nullable) = false];
+  common.Coin emit_asset = 8 [(gogoproto.nullable) = false];
+  string synth_units = 9 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  uint64 streaming_swap_quantity = 10;
+  uint64 streaming_swap_count = 11;
+}
+
+message EventAffiliateFee {
+  string tx_id = 1 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.TxID", (gogoproto.customname) = "TxID"];
+  string memo = 2;
+  string mayaname = 3;
+  string cacao_address = 4 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.Address"];
+  common.Asset asset = 5 [(gogoproto.nullable) = false];
+  string gross_amount = 6 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  uint64 fee_bps_tick = 7;
+  string fee_amount = 8 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string parent = 9;
+  uint64 sub_fee_bps = 10;
+}
+
+message EventAddLiquidity {
+  common.Asset pool = 1 [(gogoproto.nullable) = false];
+  string provider_units = 2 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string cacao_address = 3 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.Address"];
+  string cacao_amount = 4 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string asset_amount = 5 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string cacao_tx_id = 6 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.TxID", (gogoproto.customname) = "RuneTxID"];
+  string asset_tx_id = 7 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.TxID", (gogoproto.customname) = "AssetTxID"];
+  string asset_address = 8 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.Address"];
+}
+
+message EventWithdraw {
+  common.Asset pool = 1 [(gogoproto.nullable) = false];
+  string provider_units = 2 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  int64 basis_points = 3;
+  bytes asymmetry = 4 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Dec", (gogoproto.nullable) = false];
+  common.Tx in_tx = 5 [(gogoproto.nullable) = false];
+  string emit_asset = 6 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string emit_cacao = 7 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string imp_loss_protection = 8 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+}
+
+enum PendingLiquidityType {
+  add = 0;
+  withdraw = 1;
+}
+
+message EventPendingLiquidity {
+  common.Asset pool = 1 [(gogoproto.nullable) = false];
+  PendingLiquidityType pending_type = 2;
+  string cacao_address = 3 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.Address"];
+  string cacao_amount = 4 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string asset_address = 5 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.Address"];
+  string asset_amount = 6 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string cacao_tx_id = 7 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.TxID", (gogoproto.customname) = "RuneTxID"];
+  string asset_tx_id = 8 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.TxID", (gogoproto.customname) = "AssetTxID"];
+}
+
+message EventDonate {
+  common.Asset pool = 1 [(gogoproto.nullable) = false];
+  common.Tx in_tx = 2 [(gogoproto.nullable) = false];
+}
+
+message EventPool {
+  common.Asset pool = 1 [(gogoproto.nullable) = false];
+  types.PoolStatus Status = 2;
+}
+
+message PoolAmt {
+  common.Asset asset = 1 [(gogoproto.nullable) = false];
+  int64 amount = 2;
+}
+
+message EventRewardsV1 {
+  string bond_reward = 1 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  repeated PoolAmt pool_rewards = 2 [(gogoproto.nullable) = false];
+}
+
+message EventRewards {
+  string bond_reward = 1 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  repeated PoolAmt pool_rewards = 2 [(gogoproto.nullable) = false];
+  string cacao_pool_reward = 3  [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];;
+  string maya_fund_reward = 4  [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];;
+}
+
+message EventRefund {
+  uint32 code = 1;
+  string reason = 2;
+  common.Tx in_tx = 3 [(gogoproto.nullable) = false];
+  common.Fee fee = 4 [(gogoproto.nullable) = false];
+}
+
+enum BondType {
+  bond_paid = 0;
+  bond_returned = 1;
+  bond_reward = 2;
+  bond_cost = 3;
+  bond_reward_paid = 4;
+}
+
+message EventBond {
+  string amount = 1 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  BondType bond_type = 2;
+  common.Tx tx_in = 3 [(gogoproto.nullable) = false];
+}
+
+message EventBondV105 {
+  string amount = 1 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  BondType bond_type = 2;
+  common.Tx tx_in = 3 [(gogoproto.nullable) = false];
+  common.Asset asset = 4 [(gogoproto.nullable) = false];
+}
+
+message GasPool {
+  common.Asset asset = 1 [(gogoproto.nullable) = false];
+  string cacao_amt = 2 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string asset_amt = 3 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  int64 count = 4;
+}
+
+message EventGas {
+  repeated GasPool pools = 1 [(gogoproto.nullable) = false];
+}
+
+message EventReserve {
+  types.ReserveContributor reserve_contributor = 1 [(gogoproto.nullable) = false];
+  common.Tx in_tx = 2 [(gogoproto.nullable) = false];
+}
+
+message EventScheduledOutbound {
+  TxOutItem out_tx = 1 [(gogoproto.nullable) = false];
+}
+
+message EventSecurity {
+  string msg = 1;
+  common.Tx tx = 2 [(gogoproto.nullable) = false];
+}
+
+message EventSlash {
+  common.Asset pool = 1 [(gogoproto.nullable) = false];
+  repeated PoolAmt slash_amount = 2 [(gogoproto.nullable) = false];
+}
+
+message EventSlashLiquidity {
+  bytes node_bond_address = 1 [(gogoproto.casttype) = "github.com/cosmos/cosmos-sdk/types.AccAddress"];
+  common.Asset asset = 2 [(gogoproto.nullable) = false];
+  string address = 3 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.Address"];
+  string lp_units = 4 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+}
+
+message EventErrata {
+  string tx_id = 1 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.TxID", (gogoproto.customname) = "TxID"];
+  repeated PoolMod pools = 2 [(gogoproto.castrepeated) = "PoolMods", (gogoproto.nullable) = false];
+}
+
+message EventFee {
+  string tx_id = 1 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.TxID", (gogoproto.customname) = "TxID"];
+  common.Fee fee = 2 [(gogoproto.nullable) = false];
+  string synth_units = 3 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+}
+
+message EventOutbound {
+  string in_tx_id = 1 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.TxID", (gogoproto.customname) = "InTxID"];
+  common.Tx tx = 2 [(gogoproto.nullable) = false];
+}
+
+message EventTssKeygenMetric {
+  string pub_key = 1 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.PubKey"];
+  int64 median_duration_ms = 2;
+}
+
+message EventTssKeysignMetric {
+  string tx_id = 1 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.TxID", (gogoproto.customname) = "TxID"];
+  int64 median_duration_ms = 2;
+}
+
+message EventSlashPoint {
+  bytes node_address = 1 [(gogoproto.casttype) = "github.com/cosmos/cosmos-sdk/types.AccAddress"];
+  int64 slash_points = 2;
+  string reason = 3;
+}
+
+message EventPoolBalanceChanged {
+  PoolMod pool_change = 1 [(gogoproto.nullable) = false];
+  string reason = 2;
+}
+
+message EventSwitch {
+  bytes to_address = 1 [(gogoproto.casttype) = "github.com/cosmos/cosmos-sdk/types.AccAddress"];
+  string from_address = 2 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.Address"];
+  common.Coin burn = 3 [(gogoproto.nullable) = false];
+  string tx_id = 4 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.TxID", (gogoproto.customname) = "TxID"];
+}
+
+message EventSwitchV87 {
+  bytes to_address = 1 [(gogoproto.casttype) = "github.com/cosmos/cosmos-sdk/types.AccAddress"];
+  string from_address = 2 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.Address"];
+  common.Coin burn = 3 [(gogoproto.nullable) = false];
+  string tx_id = 4 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.TxID", (gogoproto.customname) = "TxID"];
+  string mint = 5 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+}
+
+message EventMAYANameV111 {
+  string name = 1;
+  string chain = 2 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.Chain"];
+  string address = 3 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.Address"];
+  string registration_fee = 4 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string fund_amt = 5 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  int64 expire = 6;
+  bytes owner = 7 [(gogoproto.casttype) = "github.com/cosmos/cosmos-sdk/types.AccAddress"];
+}
+
+message EventMAYAName {
+  string name = 1;
+  string chain = 2 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.Chain"];
+  string address = 3 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.Address"];
+  string registration_fee = 4 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string fund_amt = 5 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  int64 expire = 6;
+  bytes owner = 7 [(gogoproto.casttype) = "github.com/cosmos/cosmos-sdk/types.AccAddress"];
+  int64 affiliate_bps = 8;
+  repeated string subaffiliate_name = 9;
+  repeated string subaffiliate_bps = 10 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+}
+
+message EventSetMimir {
+  string key = 1;
+  string value = 2;
+}
+
+message EventSetNodeMimir {
+  string key = 1;
+  string value = 2;
+  string address = 3;
+}
+
+message EventCACAOPoolDeposit {
+  bytes cacao_address = 1 [(gogoproto.casttype) = "github.com/cosmos/cosmos-sdk/types.AccAddress"];
+  string cacao_amount = 2 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string units = 3 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string tx_id = 4 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.TxID"];
+}
+
+message EventCACAOPoolWithdraw {
+  bytes cacao_address = 1 [(gogoproto.casttype) = "github.com/cosmos/cosmos-sdk/types.AccAddress"];
+  int64 basis_points = 2;
+  string cacao_amount = 3 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string units = 4 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string tx_id = 5 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.TxID"];
+  int64 affiliate_basis_pts = 6;
+  string affiliate_amount = 7 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string affiliate_address = 8 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.Address"];
+}

@@ -1,0 +1,30 @@
+syntax = "proto3";
+package types;
+
+option go_package = "gitlab.com/mayachain/mayanode/x/mayachain/types";
+
+import "mayachain/v1/common/common.proto";
+import "gogoproto/gogo.proto";
+
+message LiquidityProvider {
+  common.Asset asset = 1 [(gogoproto.nullable) = false];
+  string cacao_address = 2 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.Address"];
+  string asset_address = 3 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.Address"];
+  int64 last_add_height = 4;
+  int64 last_withdraw_height = 5;
+  string units = 6 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string pending_cacao = 7 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string pending_asset = 8 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string pending_tx_Id = 9 [(gogoproto.casttype) = "gitlab.com/mayachain/mayanode/common.TxID", (gogoproto.customname) = "PendingTxID"];
+  string cacao_deposit_value = 10 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  string asset_deposit_value = 11 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  bytes node_bond_address = 12 [deprecated = true, (gogoproto.casttype) = 'github.com/cosmos/cosmos-sdk/types.AccAddress'];
+  string withdraw_counter = 13 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+  int64 last_withdraw_counter_height = 14;
+  repeated LPBondedNode bonded_nodes = 15 [(gogoproto.nullable) = false];
+}
+
+message LPBondedNode {
+  bytes node_address = 1 [(gogoproto.casttype) = 'github.com/cosmos/cosmos-sdk/types.AccAddress'];
+  string units = 2 [(gogoproto.customtype) = "github.com/cosmos/cosmos-sdk/types.Uint", (gogoproto.nullable) = false];
+}

@@ -1,122 +1,207 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
 import os
 import time
-import json
-import argparse
-from api_connections import fetch_recent_maya_actions
+from datetime import datetime
+import sys
+import sqlite3
 
-OUTPUT_DIR = "data"
-ACTIONS_PER_PAGE = 50  # Midgard API limit per call for /actions
-API_DELAY_SECONDS = 0.2 # Small delay between API calls
+# Project-specific imports
+from src.api_connections import (
+    get_mayanode_latest_block_height, 
+    fetch_mayanode_block,
+    construct_next_block_template # Added for initial mempool view
+)
+from src.common_utils import parse_confirmed_block
+from src.database_utils import (
+    get_db_connection,
+    create_tables,
+    get_latest_block_height_from_db,
+    get_all_block_heights_from_db, # Added for gap detection
+    insert_block,
+    check_if_block_exists
+)
 
-def fetch_actions_in_batches(total_actions_to_fetch, start_offset):
-    """
-    Fetches a specified total number of actions from the Midgard API,
-    starting from a given offset, in batches of ACTIONS_PER_PAGE.
+DEFAULT_POLL_INTERVAL_SECONDS = 10
+API_REQUEST_DELAY_SECONDS = 0.5 # Delay between individual block fetches
 
-    Args:
-        total_actions_to_fetch (int): The total number of actions to retrieve.
-        start_offset (int): The starting offset for fetching actions.
+def fetch_and_store_block(conn, height_to_fetch):
+    """Fetches, parses, and stores a single block. Returns True on success, False on failure."""
+    print(f"Processing block {height_to_fetch}...")
+    
+    # Optional: Double check if block exists before fetch+parse+insert attempt.
+    if check_if_block_exists(conn, height_to_fetch):
+        print(f"Block {height_to_fetch} already exists in DB (checked). Skipping redundant processing.")
+        return True # Count as success for moving to next block in a sequence
 
-    Returns:
-        list: A list of action dictionaries, or None if an error occurs.
-    """
-    all_fetched_actions = []
-    current_offset = start_offset
-    pages_to_fetch = (total_actions_to_fetch + ACTIONS_PER_PAGE - 1) // ACTIONS_PER_PAGE # Ceiling division
-
-    print(f"Starting fetch: {total_actions_to_fetch} actions, starting offset {start_offset}, in {pages_to_fetch} pages.")
-
-    for page_num in range(pages_to_fetch):
-        print(f"  Fetching page {page_num + 1}/{pages_to_fetch} (offset: {current_offset}, limit: {ACTIONS_PER_PAGE})...", flush=True)
-        try:
-            actions_data = fetch_recent_maya_actions(limit=ACTIONS_PER_PAGE, offset=current_offset)
-            
-            if not actions_data or "actions" not in actions_data:
-                print(f"Warning: No 'actions' key in response or empty response on page {page_num + 1}. Offset: {current_offset}", flush=True)
-                # Decide if we should stop or continue trying next pages
-                if page_num < pages_to_fetch -1 : # If not the last expected page
-                    print("  Attempting to continue to next page.", flush=True)
-                else: # If this was the last expected page, likely just end of data
-                     print("  Reached end of expected pages.", flush=True)
-                current_batch_actions = [] # Ensure it's an empty list
+    raw_block_data = fetch_mayanode_block(height=height_to_fetch)
+    if raw_block_data:
+        parsed_data = parse_confirmed_block(raw_block_data)
+        if parsed_data:
+            if insert_block(conn, parsed_data):
+                print(f"Successfully fetched, parsed, and inserted block {height_to_fetch}.")
+                return True
             else:
-                current_batch_actions = actions_data["actions"]
+                print(f"Failed to insert block {height_to_fetch} into DB.")
+                return False
+        else:
+            print(f"Failed to parse block {height_to_fetch}. Skipping.")
+            return False # Indicate failure to process this block, allows retry or specific handling
+    else:
+        print(f"Failed to fetch block {height_to_fetch} from API.")
+        return False
 
-            if not current_batch_actions and page_num < pages_to_fetch -1 :
-                print(f"Warning: API returned an empty 'actions' list on page {page_num + 1} (Offset: {current_offset}) before all expected actions were fetched. Continuing...", flush=True)
-                # This might happen if we request an offset beyond available data.
-            
-            all_fetched_actions.extend(current_batch_actions)
-            print(f"  Fetched {len(current_batch_actions)} actions. Total collected so far: {len(all_fetched_actions)} actions.", flush=True)
+def main():
+    parser = argparse.ArgumentParser(description="Continuously fetch new Mayanode blocks, filling gaps, and store them in a database.")
+    parser.add_argument(
+        "--poll-interval", type=int, default=DEFAULT_POLL_INTERVAL_SECONDS,
+        help=f"Polling interval in seconds to check for new blocks (default: {DEFAULT_POLL_INTERVAL_SECONDS})."
+    )
+    parser.add_argument(
+        "--start-at-latest", action='store_true',
+        help="If set, on first run, will only fetch from the current latest API block onwards, skipping historical backfill."
+    )
+    parser.add_argument(
+        "--max-blocks-per-cycle", type=int, default=100,
+        help="Maximum number of blocks to attempt to fetch in a single (gap-filling or polling) cycle (default: 100)."
+    )
+    parser.add_argument(
+        "--disable-initial-mempool", action='store_true',
+        help="If set, disables fetching and printing the initial mempool-based next block template."
+    )
 
-            if len(current_batch_actions) < ACTIONS_PER_PAGE and page_num < pages_to_fetch - 1:
-                print(f"  Warning: Fetched fewer actions ({len(current_batch_actions)}) than limit ({ACTIONS_PER_PAGE}) on page {page_num + 1}. Reached end of available data early.", flush=True)
-                # break # Stop if we get less than a full page, means no more data past this.
+    args = parser.parse_args()
 
-            current_offset += ACTIONS_PER_PAGE
-            time.sleep(API_DELAY_SECONDS)
+    print(f"--- Mayanode Continuous Block Ingestion Service --- {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---")
+    print(f"Polling interval: {args.poll_interval} seconds")
+    print(f"Max blocks per cycle: {args.max_blocks_per_cycle}")
+    if args.start_at_latest: print("Mode: Start at latest API block, skipping historical backfill on first run.")
+    if args.disable_initial_mempool: print("Initial mempool block construction: DISABLED")
 
-        except Exception as e:
-            print(f"ERROR: An exception occurred during API call for offset {current_offset}: {e}", flush=True)
-            # Optionally, decide if we should retry or just return what we have
-            return None # Indicate failure
-
-    print(f"Finished fetching. Total actions collected: {len(all_fetched_actions)} (requested: {total_actions_to_fetch}).")
-    return all_fetched_actions
-
-def save_actions_to_json(actions_list, filename):
-    """
-    Saves a list of action dictionaries to a JSON file in the OUTPUT_DIR.
-    The JSON structure will be {"actions": [...]}.
-    Replaces the file if it exists.
-    """
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
-        print(f"Created directory: {OUTPUT_DIR}", flush=True)
-    
-    output_file_path = os.path.join(OUTPUT_DIR, filename)
-
-    print(f"Saving {len(actions_list)} actions to {output_file_path}...", flush=True)
+    conn = None
     try:
-        with open(output_file_path, 'w') as f:
-            json.dump({"actions": actions_list}, f, indent=4) # Add indent for readability
-        print(f"Successfully saved actions to {output_file_path}", flush=True)
-    except Exception as e:
-        print(f"ERROR: Failed to save actions to {output_file_path}. Error: {e}", flush=True)
+        conn = get_db_connection()
+        create_tables(conn)
+        print("Database connection established and tables ensured.")
 
-def main(args):
-    # --- 1. Fetch and Save Test Data ---
-    print("\n--- Fetching Test Data (data/test_data.json) ---")
-    test_actions_to_fetch = 2500
-    test_start_offset = 0
-    test_actions = fetch_actions_in_batches(test_actions_to_fetch, test_start_offset)
-    
-    if test_actions is not None:
-        save_actions_to_json(test_actions, "test_data.json")
-    else:
-        print("Failed to fetch test data. Skipping save.")
+        # 1. Initial Mempool Block (if not disabled)
+        if not args.disable_initial_mempool:
+            print("\n--- Constructing Initial Next Block Template (from Mempool) ---")
+            next_block_template = construct_next_block_template()
+            if next_block_template:
+                print("Successfully constructed next block template.")
+                # Optionally print parts of it or the whole thing
+                print(json.dumps(next_block_template, indent=2))
+                print("--- End of Initial Next Block Template ---")
+            else:
+                print("Could not construct initial next block template.")
 
-    # --- 2. Fetch and Save Training Data ---
-    print("\n--- Fetching Training Data (data/transactions_data.json) ---")
-    train_actions_to_fetch = 25000
-    # Training data starts after test data, so offset is the number of test actions fetched.
-    # If test_actions was None or incomplete, this might need adjustment or a fixed offset.
-    # For simplicity, assuming test_actions_to_fetch is the correct offset.
-    train_start_offset = test_actions_to_fetch 
-    train_actions = fetch_actions_in_batches(train_actions_to_fetch, train_start_offset)
-    
-    if train_actions is not None:
-        save_actions_to_json(train_actions, "transactions_data.json")
-    else:
-        print("Failed to fetch training data. Skipping save.")
+        # 2. Startup Synchronization: Fill Gaps
+        print("\n--- Startup Synchronization: Checking for missing historical blocks ---")
+        latest_api_height = get_mayanode_latest_block_height()
+        if latest_api_height is None:
+            print("Critical: Could not determine latest API block height. Cannot perform sync. Exiting.")
+            return
+
+        print(f"Current latest API block height: {latest_api_height}")
         
-    print("\n--- Data Fetching Process Complete ---")
+        stored_heights = get_all_block_heights_from_db(conn)
+        print(f"Found {len(stored_heights)} blocks in the local database.")
+
+        first_block_to_consider_for_gaps = 1
+        if args.start_at_latest and not stored_heights: # Only applies if DB is empty
+            print(f"--start-at-latest is set and DB is empty. Sync will begin from {latest_api_height}.")
+            first_block_to_consider_for_gaps = latest_api_height
+        
+        missing_heights = []
+        for h in range(first_block_to_consider_for_gaps, latest_api_height + 1):
+            if h not in stored_heights:
+                missing_heights.append(h)
+        
+        if missing_heights:
+            print(f"Found {len(missing_heights)} missing historical blocks (from {missing_heights[0]} to {missing_heights[-1]} in segments). Attempting to fetch...")
+            blocks_synced_total = 0
+            for i in range(0, len(missing_heights), args.max_blocks_per_cycle):
+                batch_to_fetch = missing_heights[i:i + args.max_blocks_per_cycle]
+                print(f"Syncing batch of {len(batch_to_fetch)} missing blocks starting from {batch_to_fetch[0]}...")
+                batch_success = True
+                for height in batch_to_fetch:
+                    if not fetch_and_store_block(conn, height):
+                        print(f"Failed to sync block {height}. Stopping current batch sync.")
+                        batch_success = False
+                        break 
+                    blocks_synced_total +=1
+                    time.sleep(API_REQUEST_DELAY_SECONDS)
+                if not batch_success:
+                    print("Error during batch sync. Will retry on next full polling cycle if issues persist.")
+                    break # Stop further batch processing in this startup sync
+            print(f"Startup synchronization completed. Synced {blocks_synced_total} missing blocks.")
+        else:
+            print("No missing historical blocks found up to current API height. Database is synchronized.")
+
+        # 3. Continuous Polling Loop
+        print("\n--- Starting Continuous Polling for New Blocks ---")
+        while True:
+            current_db_latest = get_latest_block_height_from_db(conn)
+            next_block_to_fetch = (current_db_latest + 1) if current_db_latest else 1
+            # If --start-at-latest was used and DB was empty, ensure we don't re-fetch by starting from the known latest
+            if args.start_at_latest and not current_db_latest : # and implies DB was empty at start
+                 api_latest_for_poll_start = get_mayanode_latest_block_height()
+                 if api_latest_for_poll_start:
+                    next_block_to_fetch = api_latest_for_poll_start +1 
+            
+            print(f"\n--- Polling Cycle: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} --- Next block to fetch: {next_block_to_fetch}")
+            latest_api_height_poll = get_mayanode_latest_block_height()
+
+            if latest_api_height_poll is None:
+                print("Could not fetch latest block height from API during poll. Retrying after interval.")
+                time.sleep(args.poll_interval)
+                continue
+            
+            print(f"Latest API height: {latest_api_height_poll}. DB latest: {current_db_latest if current_db_latest else 'N/A'}")
+
+            blocks_fetched_this_cycle = 0
+            if latest_api_height_poll >= next_block_to_fetch:
+                print(f"New blocks potentially available. Checking from {next_block_to_fetch} up to {latest_api_height_poll}.")
+                
+                target_end_height_for_cycle = min(latest_api_height_poll, next_block_to_fetch + args.max_blocks_per_cycle - 1)
+                
+                for height in range(next_block_to_fetch, target_end_height_for_cycle + 1):
+                    if not fetch_and_store_block(conn, height):
+                        print(f"Failed to process block {height} during polling. Will retry in next cycle.")
+                        break # Stop this cycle's fetching on failure
+                    blocks_fetched_this_cycle += 1
+                    time.sleep(API_REQUEST_DELAY_SECONDS)
+                
+                if blocks_fetched_this_cycle > 0:
+                    print(f"Fetched {blocks_fetched_this_cycle} block(s) in this polling cycle.")
+                elif latest_api_height_poll >= next_block_to_fetch:
+                    print("No blocks fetched this cycle, but still catching up or API hasn't advanced.")
+                else:
+                    print("Database appears up to date with API latest.")
+            else:
+                print("Database is up to date with the latest API height.")
+
+            print(f"Waiting for {args.poll_interval} seconds before next poll...")
+            time.sleep(args.poll_interval)
+
+    except KeyboardInterrupt:
+        print("\nShutdown signal received. Exiting gracefully...")
+    except sqlite3.Error as db_err:
+        print(f"Database error occurred: {db_err}. Shutting down.")    
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}. Shutting down.")
+    finally:
+        if conn:
+            conn.close()
+            print("Database connection closed.")
+        print(f"--- Mayanode Continuous Block Ingestion Service SHUT DOWN: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---")
 
 if __name__ == "__main__":
-    # No arguments needed for this specific script anymore,
-    # as the behavior is fixed (fetch for test_data.json and transactions_data.json)
-    # However, keeping argparse structure in case we want to add options later.
-    parser = argparse.ArgumentParser(description="Fetch Maya Protocol actions and save as raw JSON for training and test datasets.")
-    # Example: parser.add_argument("--api-key", type=str, help="Optional API key if Midgard requires it in the future.")
-    cli_args = parser.parse_args()
-    main(cli_args) 
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(current_dir) 
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    main()

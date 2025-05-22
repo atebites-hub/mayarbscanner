@@ -1,41 +1,42 @@
 # Maya Protocol Arbitrage Scanner
 
-This project aims to build an AI-driven system to analyze and understand transaction dynamics on the Maya Protocol. Initially focused on direct arbitrage prediction, the project has **evolved to focus on a generative model** capable of predicting subsequent transactions in a sequence, using only internal Maya Protocol transaction data.
+**MAJOR PROJECT PIVOT: This project is undergoing a significant change in direction.**
 
-## Project Phases
+Previously, the project aimed to predict individual transactions using data from the Midgard API. This README section reflects that now **SUPERSEDED** approach.
 
--   **Phase 1: Data Infrastructure (Completed)** - Focused on fetching, parsing, and storing Maya Protocol transaction data. Initial web UI setup.
--   **Phase 2: Predictive Arbitrage Model (Completed & Superseded)** - Focused on data preprocessing for AI, building a Transformer-based model to predict specific arbitrage signals. *This phase is complete and has been superseded by the more fundamental approach in Phase 3.*
--   **Phase 3: Generative Transaction Prediction Model - Core Development (Largely Completed)** - Developing a Transformer-based model to predict the *entire next transaction* in a sequence. This involved:
-    -   Utilizing a comprehensive set of features from all transaction types.
-    -   Employing techniques like feature hashing and robust ID mapping.
-    -   Training a model to predict the complete feature vector of the subsequent transaction.
-    -   Developing evaluation scripts with per-feature metrics and a weighted performance score.
-    -   Successfully trained and evaluated a model (`s25_l6`) with sequence length 25 and 6 encoder layers.
--   **Phase 4: Realtime Inference Suite & Advanced Generative Model Refinements (Current Focus)** - Building a suite (`src/realtime_inference_suite.py`) for running the generative model in simulation and live prediction modes. This includes reconstructing Midgard-like JSON outputs. Future work in this phase will involve robust testing, integrating actual Maya Protocol data, and potentially mempool data.
--   **Phase 5: Deployment and Iteration (Future)** - Deploying the refined system and establishing continuous iteration cycles.
+**NEW DIRECTION (Phase 10 onwards): Generative Block Prediction Model using Mayanode API & Tendermint RPC**
 
-## Current Status
+The project has pivoted to a more fundamental and potentially powerful approach: **predicting entire blocks of the Maya Protocol blockchain.** This involves:
+-   **Data Sources:**
+    -   Mayanode API (`https://mayanode.mayachain.info/mayachain/block`): For fetching comprehensive confirmed block data. This endpoint often provides transactions as **pre-decoded JSON objects**.
+    -   Tendermint RPC (`https://tendermint.mayachain.info`): For fetching confirmed blocks (which contain transactions as **base64 encoded Protobuf strings**) and for mempool data (also Protobuf).
+-   **Prediction Target:** The AI model will be trained to predict the *entire next block* (or a sequence of blocks), including block headers, all contained transactions, and associated event data.
+-   **Rationale:** Predicting full blocks offers a richer, more structured data source that encodes more information about blockchain dynamics, potentially leading to a more accurate and insightful generative model. Arbitrage opportunities and other analyses will be emergent properties of these block predictions.
+-   **Status & Key Achievements:**
+    -   This is a **fresh start**. Code related to Midgard data fetching and individual transaction prediction (Phases 1-5) has been overhauled or removed.
+    -   API clients in `src/api_connections.py` for Mayanode and Tendermint RPC are implemented and tested.
+    -   Core parsing logic in `src/common_utils.py` for Mayanode JSON block structures is in place.
+    -   **Protobuf Decoding Solution for Tendermint Data:**
+        -   A robust solution for decoding `cosmos.tx.v1beta1.Tx` messages (from Tendermint RPC) in Python has been successfully implemented using `betterproto`.
+        -   This involves a curated set of `.proto` files (`proto/src/`) and generated Python stubs (`proto/generated/pb_stubs/`).
+        -   **Crucially, both the source `.proto` files and the generated Python stubs are committed to Git** to ensure reproducibility and ease of setup for developers, avoiding the complexities of replicating the `protoc` compilation environment.
+        -   For historically problematic or highly specific Mayanode types (e.g., `types.MsgObservedTxOut`), a fallback method using `protoc --decode` via `subprocess` is documented and available (`scripts/decode_local_block_for_comparison.py`).
+        -   A comprehensive guide, `Docs/Python_Protobuf_Decoding_Guide_Mayanode.md`, details both of these decoding methods.
+    -   A script `scripts/compare_block_data.py` has been developed to fetch blocks from both Mayanode (JSON and reconstructed Tendermint-like) and Tendermint (Protobuf, then decoded), saving them for comparison.
+    -   Database schema (`src/database_utils.py`) is designed, and data ingestion (`src/fetch_realtime_transactions.py`) is under development.
 
-The project has largely completed **Phase 3 (Generative Transaction Prediction Model)** and is now actively developing **Phase 4 (Realtime Inference Suite)**.
-Key achievements in Phase 3 include:
--   Defining a comprehensive feature schema.
--   Refactoring `src/preprocess_ai_data.py` for generative modeling (raw JSON to features, artifact generation).
--   Implementing the `GenerativeTransactionModel` in `src/model.py`.
--   Updating `src/train_model.py` with a composite loss and model config augmentation.
--   Developing `src/evaluate_model_generative.py` and achieving a weighted performance score of **0.8316** with the `s25_l6` model.
+Further details of this new approach are documented in `Docs/Implementation Plan.md` and the `.cursor/scratchpad.md` files.
 
-Work on `src/realtime_inference_suite.py` (Phase 4) has progressed to:
--   Loading models and artifacts.
--   Preprocessing single actions and sequences for inference.
--   Decoding model predictions into a flat feature dictionary.
--   Initial implementation of a simulation mode (`run_generative_simulation`) with a feedback loop.
--   Ongoing refinement of `reconstruct_to_midgard_format` to convert decoded predictions into well-structured Midgard-like JSON.
--   Refining numerical amount handling by implementing per-asset scaling strategies to improve prediction accuracy for features like transaction amounts and fees.
+---
+*The following sections describe the OLD (superseded) approach for historical context only.*
 
-## Getting Started: Step-by-Step Instructions (Phase 3 & Initial Phase 4)
+## Project Phases (OLD - SUPERSEDED - Details Omitted for Brevity)
 
-Follow these steps to set up the project, preprocess data, train the generative model, evaluate it, and run the initial simulation mode of the inference suite.
+## Current Status (OLD - SUPERSEDED - Details Omitted for Brevity)
+
+## Getting Started: Step-by-Step Instructions (NEW - Phase 10 Focus)
+
+Follow these steps to set up the project environment. The primary focus is on data fetching, parsing (including Protobuf decoding), and comparison, which are prerequisites for AI model development.
 
 ### 1. Setup
 
@@ -58,143 +59,99 @@ Follow these steps to set up the project, preprocess data, train the generative 
       ```bash
       pip install -r requirements.txt
       ```
+      This will install `betterproto[compiler]`, `protobuf==4.21.12`, `grpclib`, and other necessary packages for the current Protobuf decoding strategy.
 
-### 2. Data
+   d. **Protobuf Handling (IMPORTANT - Pre-configured for `betterproto`):
+      -   **Source `.proto` files** are located in `proto/src/`.
+      -   **Pre-generated Python stubs** (using `betterproto`) are located in `proto/generated/pb_stubs/`.
+      -   **Both of these directories are committed to Git.** This means you **DO NOT need to run a `protoc` compilation step yourself** to use the primary `CosmosTx` decoding functionality.
+      -   The Python scripts (e.g., `scripts/compare_block_data.py`) are configured to use these pre-generated stubs.
+      -   For detailed information on how these were generated, or if you need to regenerate them or decode other message types, refer to `Docs/Python_Protobuf_Decoding_Guide_Mayanode.md`.
 
-   -   For the current development of the Phase 3 generative model, a sample JSON file named `data/transactions_data.json` (containing THORChain transaction data, structurally similar to Maya Midgard `/actions` output) is used.
-   -   Ensure this file is present in the `data/` directory.
-   -   *Future Work:* `src/fetch_realtime_transactions.py` will be updated to fetch raw, unfiltered JSON transaction data directly from the Maya Protocol Midgard API to create larger and more diverse datasets.
+### 2. Key Scripts & Data
 
-### 3. Data Preprocessing (Generative Model - Training Data)
+   -   **Data Sources:**
+        -   Mayanode API: `https://mayanode.mayachain.info/mayachain/block`
+        -   Tendermint RPC: `https://tendermint.mayachain.info/block`
+   -   **Core Logic & Utilities:**
+        -   `src/api_connections.py`: Fetches data from Mayanode and Tendermint.
+        -   `src/common_utils.py`: General parsing utilities.
+        -   `Docs/Python_Protobuf_Decoding_Guide_Mayanode.md`: Essential reading for understanding Protobuf decoding.
+        -   `proto/src/`: Source `.proto` files.
+        -   `proto/generated/pb_stubs/`: Pre-generated Python stubs for `betterproto`.
+   -   **Example & Test Scripts:**
+        -   `scripts/compare_block_data.py`: Fetches a block from both Mayanode and Tendermint, decodes Tendermint transactions using `betterproto` stubs, and saves all versions (decoded Tendermint, raw Mayanode, reconstructed Mayanode) to `comparison_outputs/` for analysis.
+        -   `scripts/test_mayanode_decoding.py`: Demonstrates deep decoding of `CosmosTx` messages, including nested `Any` types and address derivation, using the `betterproto` stubs.
+        -   `scripts/decode_local_block_for_comparison.py`: Demonstrates the fallback `subprocess` method for decoding complex types like `MsgObservedTxOut` (uses sample data strings within the script).
 
-   This script processes the raw JSON transaction data (e.g., `data/transactions_data.json`) in `train` mode. It flattens transactions according to a defined schema, performs ID mapping for categorical features, uses feature hashing for high-cardinality features like addresses, scales numerical features, and generates sequences where the target is the full feature vector of the next transaction. Artifacts (mappings, scaler, model configuration) are saved to a specified directory (e.g., `data/processed_ai_data_generative_train_s25_l6/`). The processed sequences are saved as an NPZ file (e.g., `data/processed_ai_data_generative_train_s25_l6/sequences_and_targets_generative_thorchain_s25_l6.npz`).
+### 3. Running the Comparison Script (Example Usage)
 
+   To see the current data fetching, decoding, and comparison in action:
    ```bash
-   python src/preprocess_ai_data.py --mode train \
-       --data-dir data \
-       --input-json transactions_data.json \
-       --processed-data-dir-generative data/processed_ai_data_generative_train_s25_l6 \
-       --output-npz-generative sequences_and_targets_generative_thorchain_s25_l6.npz \
-       --artifacts-dir-generative data/processed_ai_data_generative_train_s25_l6/thorchain_artifacts_v1 \
-       --scaler-filename-generative scaler_generative_thorchain_s25_l6.pkl \
-       --model-config-filename-generative model_config_generative_thorchain_s25_l6.json
+   python scripts/compare_block_data.py
    ```
-   *Expected Outcome:* Files like `sequences_and_targets_generative_thorchain_s25_l6.npz`, `scaler_generative_thorchain_s25_l6.pkl`, `model_config_generative_thorchain_s25_l6.json`, and various `*_to_id_generative_thorchain.json` mapping files are created in the specified artifacts directory.
+   This will:
+   1.  Fetch a predefined block (e.g., 11255442) from Tendermint RPC.
+   2.  Decode its transactions using the `betterproto` stubs.
+   3.  Save the decoded Tendermint block to `comparison_outputs/tendermint_block_11255442_decoded.json`.
+   4.  Fetch the same block from the Mayanode API and save the raw response to `comparison_outputs/mayanode_api_block_11255442_raw.json`.
+   5.  Fetch the same block again using `fetch_mayanode_block` (which reconstructs it to a Tendermint-like structure) and save it to `comparison_outputs/mayanode_api_block_11255442_reconstructed.json`.
+   6.  Print a summary comparison.
 
-### 4. Model Training (Generative Model - s25_l6)
+   You can then inspect the JSON files in the `comparison_outputs/` directory.
 
-   This script loads the preprocessed generative sequences and the model configuration. It trains the `GenerativeTransactionModel` using a composite loss function and saves the best performing model (based on validation loss) and the final model to the `models/` directory.
+### 4. Next Steps in Development (Block Prediction Model)
 
-   ```bash
-   python src/train_model.py \
-       --input-npz-generative data/processed_ai_data_generative_train_s25_l6/sequences_and_targets_generative_thorchain_s25_l6.npz \
-       --generative-model-config-path data/processed_ai_data_generative_train_s25_l6/thorchain_artifacts_v1/model_config_generative_thorchain_s25_l6.json \
-       --model-save-dir models \
-       --best-model-save-path models/best_generative_model_thorchain_s25_l6.pth \
-       --final-model-save-path models/final_generative_model_thorchain_s25_l6.pth \
-       --num_encoder_layers 6 \
-       --num_epochs 20 \
-       --batch_size 128
-   ```
-   *Expected Outcome:*
-     - Console output showing training progress (overall loss and components like categorical, numerical, flag losses).
-     - Model files `models/best_generative_model_thorchain_s25_l6.pth` and `models/final_generative_model_thorchain_s25_l6.pth` created/updated.
+   With data fetching and Protobuf decoding for Tendermint transactions established, the next steps involve:
+   -   Refining data parsing in `src/common_utils.py` to integrate decoded Tendermint transaction data.
+   -   Completing the data ingestion pipeline into the SQLite database (`src/fetch_realtime_transactions.py`, `src/database_utils.py`).
+   -   Developing `src/preprocess_ai_data.py` for feature engineering from block data.
+   -   Adapting/creating the generative AI model (`src/model.py`) for block prediction.
+   -   Updating training (`src/train_model.py`) and evaluation scripts.
 
-### 5. Data Preprocessing (Generative Model - Test Data)
+## Project Structure (Reflecting Cleaned State & New Focus)
 
-   This script processes the raw JSON transaction data (e.g., `data/test_data.json`) in `test` mode. It uses the artifacts from the training preprocessing to generate features for the generative model. The processed sequences are saved as an NPZ file (e.g., `data/processed_ai_data_generative_test_s25_l6/sequences_and_targets_generative_thorchain_s25_l6.npz`).
-
-   ```bash
-   python src/preprocess_ai_data.py --mode test \
-       --input-json test_data.json \
-       --data-dir data \
-       --artifacts-dir-generative data/processed_ai_data_generative_train_s25_l6/thorchain_artifacts_v1 \
-       --processed-data-dir-generative data/processed_ai_data_generative_test_s25_l6 \
-       --output-npz-generative sequences_and_targets_generative_thorchain_s25_l6.npz \
-       --scaler-filename-generative scaler_generative_thorchain_s25_l6.pkl \
-       --model-config-filename-generative model_config_generative_thorchain_s25_l6_AUGMENTED.json
-   ```
-   *Expected Outcome:* Processed test data NPZ in `data/processed_ai_data_generative_test_s25_l6/`. Note the output model config filename is augmented.
-
-### 6. Model Evaluation (Generative Model - s25_l6)
-
-   This script loads a trained generative model (e.g., `models/best_generative_model_thorchain_s25_l6.pth`), its configuration, and test data (currently using the same NPZ as training/validation for initial testing). It evaluates the model's performance on predicting each feature of the next transaction, prints per-feature metrics, and saves results to the `evaluation_results_generative_s25_l6/` directory.
-
-   ```bash
-   python src/evaluate_model_generative.py \
-       --model-dir models \
-       --model-filename best_generative_model_thorchain_s25_l6.pth \
-       --artifacts-dir data/processed_ai_data_generative_train_s25_l6/thorchain_artifacts_v1 \
-       --model-config-filename model_config_generative_thorchain_s25_l6_AUGMENTED.json \
-       --test-data-dir data/processed_ai_data_generative_test_s25_l6 \
-       --test-data-npz sequences_and_targets_generative_thorchain_s25_l6.npz \
-       --evaluation-output-dir evaluation_results_generative_s25_l6 \
-       --feature-weights-json feature_weights.json
-   ```
-   *Expected Outcome:*
-     - Console output showing per-feature metrics (Accuracy, F1-score, MSE, MAE).
-     - Overall test set loss and its components.
-     - JSON file with detailed metrics (`evaluation_results_generative_s25_l6/evaluation_metrics.json`).
-     - Plots, such as confusion matrices for selected categorical features (e.g., `evaluation_results_generative_s25_l6/cm_action_type_id.png`).
-
-### 7. Realtime Inference Suite - Simulation Mode (Phase 4 - Initial Test)
-
-   Runs the generative simulation using the trained `s25_l6` model.
-
-   ```bash
-   python src/realtime_inference_suite.py --mode simulate \
-       --model-path models/best_generative_model_thorchain_s25_l6.pth \
-       --artifacts-dir data/processed_ai_data_generative_train_s25_l6/thorchain_artifacts_v1 \
-       --model-config-filename model_config_generative_thorchain_s25_l6_AUGMENTED.json \
-       --num-simulation-steps 10 \
-       --output-simulation-file simulated_transactions_reconstructed_s25_l6.json
-   ```
-   *Expected Outcome:* Console output showing simulation steps and a file `simulated_transactions_reconstructed_s25_l6.json` containing the generated transactions in a Midgard-like format.
-
-## Project Structure
-
--   `src/`: Contains all Python source code.
-    -   `fetch_realtime_transactions.py`: Fetches historical data (primarily for Phase 2, to be adapted for Phase 4 raw JSON fetching).
-    -   `preprocess_ai_data.py`: Preprocesses data for the generative model.
-    -   `model.py`: Defines the `GenerativeTransactionModel`.
-    -   `train_model.py`: Script for training the generative model.
-    -   `evaluate_model_generative.py`: Script for evaluating the generative model.
-    -   `realtime_inference_suite.py`: Script for running the model in simulation or live prediction modes.
-    -   `app.py`: Flask application for the web UI (early stages, future development).
-    -   `static/`, `templates/`: For the Flask web UI.
--   `data/`: Stores raw and processed data.
-    -   `transactions_data.json`, `test_data.json`: Sample raw transaction data.
-    -   `feature_weights.json`: Weights for generative model evaluation.
-    -   `processed_ai_data_generative_train_s25_l6/`, `processed_ai_data_generative_test_s25_l6/`: Outputs from Phase 3/4 preprocessing.
+-   `src/`:
+    -   `fetch_realtime_transactions.py`: For downloading historical Mayanode blocks and future continuous database ingestion.
+    -   `api_connections.py`: Functions to connect to Mayanode REST API and Tendermint RPC.
+    -   `common_utils.py`: Parsing block and transaction data.
+    -   `database_utils.py`: SQLite database operations.
+    -   `preprocess_ai_data.py`: (To be developed) Feature engineering for block prediction.
+    -   `model.py`: (To be developed) Generative block prediction model.
+    -   `train_model.py`: (To be adapted) Training script for the block model.
+    -   *(Other evaluation/inference scripts to be added for block model)*
+-   `proto/`:
+    -   `src/`: Source `.proto` files (committed to Git).
+    -   `generated/pb_stubs/`: Python stubs generated by `betterproto` (committed to Git).
+-   `scripts/`:
+    -   `compare_block_data.py`: Compares blocks from Mayanode and Tendermint, demonstrating `betterproto` decoding.
+    -   `test_mayanode_decoding.py`: Further tests `betterproto` decoding of `CosmosTx`.
+    -   `decode_local_block_for_comparison.py`: Demonstrates `subprocess` fallback for `MsgObservedTxOut`.
+-   `comparison_outputs/`: Directory where `compare_block_data.py` saves its JSON output files.
+-   `data/`: Stores raw and processed data, sample transactions for testing (historical, currently minimal).
 -   `models/`: Stores trained model weights (`*.pth`).
--   `evaluation_results_generative_s25_l6/`: Stores evaluation outputs for the `s25_l6` model.
--   `Docs/`: Project documentation (Requirements, Implementation Plan, Feature Schema, etc.).
+-   `Docs/`: Contains detailed documentation:
+    -   `Implementation Plan.md`: Project phases, tasks, and deliverables.
+    -   `Project Requirements.md`: Objectives and success criteria.
+    -   `Technology Resources.md`: Links to key technologies.
+    -   `Mayanode_API_Cheat_Sheet.md`: Notes on Mayanode API endpoints.
+    -   `Python_Protobuf_Decoding_Guide_Mayanode.md`: **Essential guide for Protobuf handling.**
 -   `requirements.txt`: Python package dependencies.
--   `README.md`: This file.
+-   `.cursor/scratchpad.md`: Internal development notes and status tracker.
 
-## Key Technologies
+## Key Scripts for Phase 10 (New Block Prediction Focus)
 
--   Python 3
--   PyTorch (for the AI model)
--   Pandas, NumPy (for data manipulation)
--   Scikit-learn (for evaluation metrics)
--   Matplotlib, Seaborn (for plotting)
--   `mmh3` (for feature hashing)
--   Flask (for the web UI - future development)
--   Maya Protocol Midgard API (target data source)
-
-## Future Enhancements (Post Initial Phase 4)
-
-Once the initial Generative Transaction Prediction Model (Phase 3) is robustly established and evaluated:
-
--   **Dedicated Test Set Creation:** Implement a proper train/validation/test split strategy for the generative model, ensuring the test set is truly unseen.
--   **Expand Maya Data Fetching:** Fully implement fetching of large-scale, raw JSON transaction data from the Maya Protocol Midgard API.
--   **Advanced Generative Model Features:** Explore more complex architectures, attention mechanisms, or conditioning variables.
--   **Mempool Data Integration:** Investigate incorporating real-time mempool data to potentially refine short-term transaction predictions.
--   **Strategy Development from Predictions:** Design and test strategies based on the sequences generated by the model (e.g., for arbitrage, optimal routing, or other DeFi applications).
--   **Real-time Inference Pipeline:** Build a robust pipeline for live data ingestion and real-time transaction sequence prediction.
--   **Web UI Development:** Enhance the Flask UI to visualize predicted sequences and potential opportunities identified by the generative model.
+-   `src/api_connections.py`: Core functions for fetching Mayanode block data and Tendermint mempool data.
+-   `src/common_utils.py`: Parsing logic for block and transaction data.
+-   `src/database_utils.py`: Manages database interactions for storing blockchain data.
+-   `src/fetch_realtime_transactions.py`: Main script for ongoing data collection and storage.
+-   `decode_local_block_for_comparison.py`: Crucial for testing and validating protobuf decoding approaches.
+-   (Future scripts for Phase 10: `preprocess_ai_data.py`, `model.py`, `train_model.py`, `evaluate_model_block.py`, `realtime_inference_block.py`)
 
 ## Contributing
 
-(Placeholder for contribution guidelines if the project becomes collaborative.)
+(Details to be added later if the project becomes open to external contributions.)
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
