@@ -184,3 +184,5 @@ bin/
 decoded_tx_sample.json
 mayanode_blocks.db
 comparison_outputs/
+mayanode_blocks.db-wal
+mayanode_blocks.db-shm
