@@ -6,11 +6,14 @@ import os # Added by previous edit, keep for DB_FILE path if needed
 from datetime import datetime # For potential use in query functions or logging
 import re # Added for regex matching
 import base64 # Added for base64 encoding
+import time # For timing diagnostics
+from concurrent.futures import ThreadPoolExecutor # Changed from ProcessPoolExecutor
+import concurrent.futures
 
 # For address extraction during transaction insertion
-from .common_utils import extract_addresses_from_parsed_tx, is_mayanode_address
+from common_utils import extract_addresses_from_parsed_tx, is_mayanode_address
 # For block-level address extraction
-from .common_utils import extract_addresses_from_parsed_block
+from common_utils import extract_addresses_from_parsed_block
 
 # To test insertion, we might need to parse a sample block
 # from ..src import common_utils # Can't do relative import like this in a script
@@ -43,7 +46,7 @@ def get_db_connection(db_file_path=None):
     if db_dir and not os.path.exists(db_dir):
         try:
             os.makedirs(db_dir)
-            print(f"Created database directory: {db_dir}")
+            # print(f"Created database directory: {db_dir}") # Verbose
         except OSError as e:
             print(f"Error creating database directory {db_dir}: {e}")
             # Decide if to raise error or proceed assuming it might be created by connect
@@ -52,6 +55,7 @@ def get_db_connection(db_file_path=None):
         conn = sqlite3.connect(path_to_use)
         conn.row_factory = sqlite3.Row  # Access columns by name
         conn.execute("PRAGMA foreign_keys = ON;") # Enforce foreign key constraints
+        conn.execute("PRAGMA journal_mode=WAL;") # Enable Write-Ahead Logging
         # print(f"Database connection established to: {path_to_use}") # Verbose
         return conn
     except sqlite3.Error as e:
@@ -231,8 +235,18 @@ def create_tables(conn):
     # Removed UNIQUE (tx_hash, address, role) to allow an address to appear multiple times with the same role if it's from different messages or events.
     # Consider if a more granular unique constraint is needed, e.g., (tx_hash, address, role, message_id, event_db_id) if that makes sense.
 
+    # --- Add Indexes ---
+    # For optimizing _get_formatted_transactions_for_block -> PrefetchEvents
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_tx_hash_category_index ON events (tx_hash, event_category, event_index)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_event_attributes_event_db_id_attribute_index ON event_attributes (event_db_id, attribute_index)")
+    # Index on foreign key in event_attributes for the join
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_event_attributes_event_db_id ON event_attributes (event_db_id)")
+
+    # For optimizing _get_formatted_events_internal (used by block reconstruction for begin/end block events)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_block_height_category_index ON events (block_height, event_category, event_index)")
+
     conn.commit()
-    print("Database tables ensured (created or verified existence with new relational schema).")
+    # print("Database tables ensured (created or verified existence with new relational schema).") # Verbose
 
 def check_if_block_exists(conn, block_height: int) -> bool:
     """Checks if a block with the given height already exists in the database."""
@@ -309,7 +323,7 @@ def insert_block(conn, parsed_block_data: dict):
                 insert_transaction(conn, tx_data, parsed_block_data['block_height'])
 
         conn.commit() # Commit after the block and ALL its components are inserted
-        print(f"Block {parsed_block_data['block_height']} and all its components processed and committed.")
+        # print(f"Block {parsed_block_data['block_height']} and all its components processed and committed.") # Verbose
         return True # Overall success if we reached here without a major error
 
     except sqlite3.Error as e:
@@ -671,48 +685,108 @@ def get_all_block_heights_from_db(conn) -> set[int]:
 def _get_formatted_events_internal(conn, block_height: int = None, tx_hash: str = None, event_category: str = None) -> list[dict]:
     """Internal helper to fetch and format events and their attributes.
     Can fetch by block_height + category (for block events) OR by tx_hash + category (for tx events).
+    Refactored to use a JOIN and reduce N+1 queries.
     """
+    _func_start_time = time.time()
     if not ((block_height and event_category) or (tx_hash and event_category)):
         raise ValueError("Must provide (block_height and event_category) or (tx_hash and event_category)")
 
     cursor = conn.cursor()
-    formatted_events = []
     
-    base_query = "SELECT event_db_id, event_type FROM events WHERE "
+    query = """
+    SELECT
+        e.event_db_id,
+        e.event_type,
+        e.event_index, 
+        ea.attribute_key,
+        ea.attribute_value
+    FROM events e
+    LEFT JOIN event_attributes ea ON e.event_db_id = ea.event_db_id
+    WHERE """
+    
     params = []
+    where_clauses = []
 
     if block_height is not None and event_category:
-        base_query += "block_height = ? AND event_category = ? "
+        where_clauses.append("(e.block_height = ? AND e.event_category = ? AND e.tx_hash IS NULL)")
         params.extend([block_height, event_category])
-    elif tx_hash is not None and event_category: # Implicitly block_height will be NULL for these if correctly inserted
-        base_query += "tx_hash = ? AND event_category = ? "
-        params.extend([tx_hash, event_category])
     
-    base_query += "ORDER BY event_index" # Crucial for maintaining order
+    if tx_hash is not None and event_category: # tx_hash can be specified alongside block_height for tx_result events
+        # If only tx_hash and category are given, assume block_height is determined by the tx_hash relationship
+        # For 'transaction_result' category, block_height in the events table is actually the block_height of the transaction.
+        # The original schema had block_height as NOT NULL in events, but it seems it can be NULL for tx-specific events if that tx_hash implies the block.
+        # For safety and correctness with the new schema, if tx_hash is present, filter on it primarily.
+        # The schema has block_height NOT NULL, so for tx_events, it should be populated correctly during insertion.
+        clause = "(e.tx_hash = ? AND e.event_category = ?)"
+        if block_height is not None: # If block_height is also passed (e.g. for tx_result events), include it
+            clause = "(e.block_height = ? AND e.tx_hash = ? AND e.event_category = ?)"
+            params.extend([block_height, tx_hash, event_category])
+        else:
+            params.extend([tx_hash, event_category])
+        where_clauses.append(clause)
+
+    if not where_clauses:
+        # This case should ideally be caught by the initial ValueError check
+        print(f"Warning: _get_formatted_events_internal called with insufficient context. BlockH: {block_height}, TxH: {tx_hash}, Cat: {event_category}")
+        return []
+
+    query += " OR ".join(where_clauses) # This logic might need refinement if both block and tx context can be simultaneously valid for different parts of a complex query (not the case here)
+    # Ensure the query is correctly formed if only one context is provided
+    if len(where_clauses) == 1:
+        query = query.replace(" OR ".join(where_clauses), where_clauses[0])
+        
+    query += " ORDER BY e.event_index, e.event_db_id, ea.attribute_index;" # Ensure consistent ordering for grouping
+
+    query_construction_time = time.time() - _func_start_time
+    db_query_time = 0
+    processing_time = 0
 
     try:
-        cursor.execute(base_query, tuple(params))
-        event_rows = cursor.fetchall()
-
-        for event_row in event_rows:
-            event_db_id = event_row['event_db_id']
-            event_type = event_row['event_type']
-            
-            attributes_cursor = conn.cursor()
-            attributes_cursor.execute(
-                "SELECT attribute_key, attribute_value FROM event_attributes WHERE event_db_id = ? ORDER BY attribute_index",
-                (event_db_id,)
-            )
-            attrs_dict = {attr_row['attribute_key']: attr_row['attribute_value'] for attr_row in attributes_cursor.fetchall()}
-            
-            formatted_events.append({
-                "type": event_type,
-                "attributes": attrs_dict
-            })
+        _ts_db_query = time.time()
+        cursor.execute(query, tuple(params))
+        rows = cursor.fetchall()
+        db_query_time = time.time() - _ts_db_query
+        
+        _ts_processing = time.time()
+        # Group attributes by event_db_id
+        events_with_attrs_temp = {}
+        for row in rows:
+            event_db_id = row['event_db_id']
+            if event_db_id not in events_with_attrs_temp:
+                events_with_attrs_temp[event_db_id] = {
+                    'type': row['event_type'],
+                    'event_index': row['event_index'], # Keep for final sorting if needed
+                    'attributes': {}
+                }
+            if row['attribute_key']: # attribute_key can be None due to LEFT JOIN if an event has no attributes
+                events_with_attrs_temp[event_db_id]['attributes'][row['attribute_key']] = row['attribute_value']
+        
+        # Convert to list and sort by original event_index to maintain order
+        # The SQL ORDER BY e.event_index, e.event_db_id should largely handle this, 
+        # but Python sort ensures if multiple events have same index (should not happen with current schema).
+        # The primary goal is to reconstruct the list in the order they appeared.
+        
+        # First, create a list of unique events with their full attributes, respecting event_index
+        unique_events_list = sorted(list(events_with_attrs_temp.values()), key=lambda ev: ev['event_index'])
+        
+        # Final list of formatted events (removing temporary 'event_index' used for sorting)
+        formatted_events = [
+            {'type': ev['type'], 'attributes': ev['attributes']} for ev in unique_events_list
+        ]
+        processing_time = time.time() - _ts_processing
+        
+        _func_end_time = time.time()
+        # Uncomment for very granular debugging, can be noisy.
+        # context_str = f"B:{block_height}" if block_height else f"T:{tx_hash}"
+        # print(f"        [DB EVT_INT {context_str} C:{event_category}] Took: {(_func_end_time - _func_start_time):.4f}s. QBuild: {query_construction_time:.4f}s, DBQ: {db_query_time:.4f}s ({len(rows)} joined rows), Proc: {processing_time:.4f}s for {len(formatted_events)} final events.")
         return formatted_events
     except sqlite3.Error as e:
         err_context = f"block {block_height}" if block_height else f"tx {tx_hash}"
-        print(f"SQLite error getting formatted events for {err_context}, category {event_category}: {e}")
+        print(f"SQLite error getting formatted events for {err_context}, category {event_category}: {e}. Query was: {query} with params {params}")
+        return []
+    except Exception as ex_gen:
+        err_context = f"block {block_height}" if block_height else f"tx {tx_hash}"
+        print(f"Unexpected error in _get_formatted_events_internal for {err_context}, category {event_category}: {ex_gen}. Query: {query}, Params: {params}")
         return []
 
 # --- Helper for Transaction Message Reconstruction ---
@@ -721,270 +795,285 @@ def _get_formatted_messages_for_tx(conn, tx_hash: str) -> list[dict]:
     Currently, it loads the raw_message_content_json as a shortcut.
     Long-term, this should reconstruct messages from their specific relational tables.
     """
-    messages = []
+    _func_start_time = time.time()
     cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT raw_message_content_json, message_type, message_index FROM transaction_messages WHERE tx_hash = ? ORDER BY message_index", (tx_hash,))
-        rows = cursor.fetchall()
-        for row in rows:
-            if row['raw_message_content_json']:
-                try:
-                    # Load the stored JSON content of the message
-                    msg_content = json.loads(row['raw_message_content_json'])
-                    # Ensure @type is present, using the stored message_type if not in the JSON itself
-                    # (though common_utils.decode_cosmos_tx_string_to_dict should add @type)
-                    if '@type' not in msg_content and row['message_type']:
-                        msg_content['@type'] = row['message_type']
-                    messages.append(msg_content)
-                except json.JSONDecodeError as e:
-                    print(f"JSON decode error for a message in tx {tx_hash} (index {row['message_index']}): {e}. Skipping message.")
-        return messages
-    except sqlite3.Error as e:
-        print(f"SQLite error getting messages for tx {tx_hash}: {e}")
-        return []
+    # print(f"        [MsgFmt TX:{tx_hash[:10]}] Start")
 
-# --- Helper for Full Transaction Reconstruction ---
+    cursor.execute("""
+        SELECT message_index, message_type, raw_message_content_json 
+        FROM transaction_messages 
+        WHERE tx_hash = ? 
+        ORDER BY message_index
+    """, (tx_hash,))
+    
+    messages_rows = cursor.fetchall()
+    formatted_messages = []
+    if messages_rows:
+        for msg_row in messages_rows:
+            try:
+                # Assuming raw_message_content_json is a string that needs to be parsed
+                content = json.loads(msg_row['raw_message_content_json']) if msg_row['raw_message_content_json'] else {}
+                formatted_messages.append({
+                    "type": msg_row['message_type'],
+                    "value": content 
+                })
+            except json.JSONDecodeError as e:
+                print(f"        [MsgFmt TX:{tx_hash[:10]}] Error decoding message content: {e} for msg_index {msg_row['message_index']}. Raw: {msg_row['raw_message_content_json']}")
+                formatted_messages.append({
+                    "type": msg_row['message_type'],
+                    "value": {"error": "Failed to decode JSON content", "raw": msg_row['raw_message_content_json']}
+                })
+    
+    # print(f"        [MsgFmt TX:{tx_hash[:10]}] End. Took {time.time() - _func_start_time:.4f}s for {len(formatted_messages)} msgs")
+    return formatted_messages
+
+# --- Worker function for parallel transaction formatting (must be top-level) ---
+def _format_single_tx_worker_entrypoint(tx_data_as_dict, db_file_path, block_height_for_tx, all_block_messages_by_tx_hash, all_block_tx_events_by_tx_hash):
+    # tx_data_as_dict is `dict(tx_row)` from the original loop
+    # db_file_path is DATABASE_FILE
+    # block_height_for_tx is the block_height
+    # all_block_messages_by_tx_hash: Pre-fetched messages for all txs in the block
+    # all_block_tx_events_by_tx_hash: Pre-fetched events for all txs in the block
+
+    tx_format_start_time = time.time()
+    # print(f"    [Worker TX:{tx_data_as_dict['tx_hash'][:10]}] Start H:{block_height_for_tx}")
+    
+    # conn = get_db_connection(db_file_path) # Connection might still be needed for other parts
+    # For now, assume messages and events are fully provided.
+    # If other DB calls are made by helper functions below, they will need a connection.
+    # Let's evaluate if conn is needed by parse_tx_fee_details or get_signer_info_from_tx_data.
+    # These helpers currently do not take `conn` and rely on data within tx_data_as_dict.
+
+    tx_hash = tx_data_as_dict['tx_hash']
+
+    # 1. Format Messages (using pre-fetched data)
+    _ts_msg_format = time.time()
+    # formatted_messages = _get_formatted_messages_for_tx(conn, tx_hash) # OLD WAY
+    raw_messages_for_this_tx = all_block_messages_by_tx_hash.get(tx_hash, [])
+    formatted_messages = []
+    for msg_row_dict in raw_messages_for_this_tx: # msg_row_dict is already a dict from pre-fetch
+        try:
+            content = json.loads(msg_row_dict['raw_message_content_json']) if msg_row_dict['raw_message_content_json'] else {}
+            formatted_messages.append({
+                "type": msg_row_dict['message_type'],
+                "value": content
+            })
+        except json.JSONDecodeError as e:
+            print(f"        [Worker MsgFmt TX:{tx_hash[:10]}] Error decoding message content: {e}. Raw: {msg_row_dict['raw_message_content_json']}")
+            formatted_messages.append({
+                "type": msg_row_dict['message_type'],
+                "value": {"error": "Failed to decode JSON content", "raw": msg_row_dict['raw_message_content_json']}
+            })
+    _dur_msg_format = time.time() - _ts_msg_format
+    
+    # 2. Format Events (using pre-fetched data)
+    _ts_event_format = time.time()
+    # formatted_tx_events = _get_formatted_events_internal(conn, tx_hash=tx_hash, event_category='transaction_result') # OLD WAY
+    formatted_tx_events = all_block_tx_events_by_tx_hash.get(tx_hash, []) # Already formatted by pre-fetch logic
+    _dur_event_format = time.time() - _ts_event_format
+
+    # ... (rest of the worker function: parse_tx_fee_details, get_signer_info_from_tx_data, constructing tx_body, tx_result, final_tx_object)
+    # This part remains largely the same as it operates on tx_data_as_dict and the newly formatted messages/events
+
+    _ts_fee_parse = time.time()
+    fee_details = json.loads(tx_data_as_dict['fee_amount']) if tx_data_as_dict['fee_amount'] else []
+    _dur_fee_parse = time.time() - _ts_fee_parse
+
+    _ts_signer_info = time.time()
+    signer_pub_key_b64 = base64.b64encode(tx_data_as_dict['signer_pub_key_bytes']).decode('utf-8') if tx_data_as_dict['signer_pub_key_bytes'] else None
+    
+    signers_info = [{
+        "pub_key": {
+            "@type": tx_data_as_dict['signer_pub_key_type'],
+            "key": signer_pub_key_b64
+        }
+        # Sequence, mode_info would require more data if needed
+    }] if signer_pub_key_b64 else [] # Simplified, usually more complex
+    _dur_signer_info = time.time() - _ts_signer_info
+    
+    tx_body = {
+        "messages": formatted_messages,
+        "memo": tx_data_as_dict['memo'],
+        "timeout_height": str(tx_data_as_dict['timeout_height']) if tx_data_as_dict['timeout_height'] else "0"
+        # Other body fields if available and needed
+    }
+
+    auth_info = {
+        "signer_infos": signers_info,
+        "fee": {
+            "amount": fee_details, # fee_details is already a list of dicts or empty list
+            "gas_limit": str(tx_data_as_dict['fee_gas_limit']) if tx_data_as_dict['fee_gas_limit'] is not None else "0",
+            "payer": tx_data_as_dict['fee_payer'] if tx_data_as_dict['fee_payer'] else "",
+            "granter": tx_data_as_dict['fee_granter'] if tx_data_as_dict['fee_granter'] else ""
+        }
+    }
+    
+    # Construct the tx_content_json as expected by Mayanode API's /cosmos/tx/v1beta1/txs/{hash}
+    tx_content_json = {
+        "body": tx_body,
+        "auth_info": auth_info,
+        "signatures": [] # Signatures are not stored/retrieved in this basic schema, add if needed
+    }
+
+    tx_result = {
+        "height": str(block_height_for_tx),
+        "txhash": tx_hash,
+        "code": tx_data_as_dict['code'],
+        "data": None, # Base64 encoded data, not typically available or stored this way
+        "raw_log": tx_data_as_dict['log'], # Often the same as log, or more detailed
+        "logs": [{"msg_index": i, "log": "", "events": ev_group} for i, ev_group in enumerate(formatted_tx_events)] if formatted_tx_events else [], # Simplified log structure
+        "info": "", # Additional info
+        "gas_wanted": str(tx_data_as_dict['gas_wanted']) if tx_data_as_dict['gas_wanted'] is not None else "0",
+        "gas_used": str(tx_data_as_dict['gas_used']) if tx_data_as_dict['gas_used'] is not None else "0",
+        "tx": {'@type': '/cosmos.tx.v1beta1.Tx', 'body': tx_body, 'auth_info': auth_info, 'signatures': []}, # Nested tx for Tendermint RPC like structure
+        "events": formatted_tx_events, # Direct events list under tx_result
+        "codespace": "" # Typically empty or root if code != 0
+    }
+    
+    # Final structure, similar to what /cosmos/tx/v1beta1/txs/{hash} might return (simplified)
+    final_tx_object = {
+        "tx": tx_content_json,
+        "tx_response": tx_result # Mayanode API usually has tx_response field
+    }
+    
+    # For debugging/timing
+    _dur_total_tx_format = time.time() - tx_format_start_time
+    # print(f"    [Worker TX:{tx_hash[:10]}] End H:{block_height_for_tx}. Took: {_dur_total_tx_format:.4f}s (MsgFmt: {_dur_msg_format:.4f}s, EvtFmt: {_dur_event_format:.4f}s, Fee: {_dur_fee_parse:.4f}s, Signer: {_dur_signer_info:.4f}s)")
+    
+    # conn.close() # Close connection if it was opened by the worker
+    return final_tx_object
+
+
+def run_worker_with_packed_args(packed_args):
+    # Unpack arguments for the worker function
+    return _format_single_tx_worker_entrypoint(*packed_args)
+
 def _get_formatted_transactions_for_block(conn, block_height: int) -> list[dict]:
-    """Fetches and reconstructs all transactions for a given block_height in Mayanode API format."""
-    formatted_transactions = []
+    """
+    Fetches and formats all transactions for a given block, including their messages and events.
+    Optimized to pre-fetch messages and events for all transactions in the block in batches.
+    """
+    _func_start_time = time.time()
+    # print(f"    [DB TX_FMT_BLK H:{block_height}] Start")
+
+    _ts_initial_tx_query = time.time()
     cursor = conn.cursor()
-    try:
-        # Fetch core transaction data
-        cursor.execute("""
-            SELECT 
-                tx_hash, tx_index_in_block, success, code, log, gas_wanted, gas_used, memo, 
-                fee_amount, fee_gas_limit, fee_payer, fee_granter, 
-                signer_pub_key_type, signer_pub_key_bytes, timeout_height
-            FROM transactions 
-            WHERE block_height = ? 
-            ORDER BY tx_index_in_block
-        """, (block_height,))
-        tx_rows = cursor.fetchall()
+    cursor.execute("""
+        SELECT 
+            tx_hash, block_height, tx_index_in_block, success, code, log, 
+            gas_wanted, gas_used, memo, fee_amount, fee_gas_limit, 
+            fee_payer, fee_granter, signer_pub_key_type, signer_pub_key_bytes, 
+            timeout_height
+        FROM transactions
+        WHERE block_height = ?
+        ORDER BY tx_index_in_block
+    """, (block_height,))
+    tx_rows = cursor.fetchall()
+    _dur_initial_tx_query = time.time() - _ts_initial_tx_query
 
-        for tx_row_data in tx_rows:
-            tx_hash = tx_row_data['tx_hash']
-            
-            # 1. Reconstruct 'tx' (tx_content_json) part
-            tx_content_json = {
-                "body": {
-                    "messages": _get_formatted_messages_for_tx(conn, tx_hash),
-                    "memo": tx_row_data['memo'],
-                    "timeout_height": str(tx_row_data['timeout_height']) if tx_row_data['timeout_height'] else "0" # API expects string
-                    # non_critical_tx_info, extension_options, non_critical_extension_options are usually empty/omitted
-                },
-                "auth_info": {
-                    "signer_infos": [], # Placeholder - see note below
-                    "fee": {
-                        "amount": [], # Placeholder - see note below
-                        "gas_limit": str(tx_row_data['fee_gas_limit']) if tx_row_data['fee_gas_limit'] is not None else "0",
-                        "payer": tx_row_data['fee_payer'],
-                        "granter": tx_row_data['fee_granter']
-                    }
-                },
-                "signatures": [] # Placeholder - Signatures are raw bytes, not typically reconstructed in this detail
-            }
+    if not tx_rows:
+        # print(f"    [DB TX_FMT_BLK H:{block_height}] No transactions found. Took: {time.time() - _func_start_time:.4f}s")
+        return []
 
-            # Reconstruct fee.amount (e.g., "1000rune,50cacao" -> [{'denom': 'rune', 'amount': '1000'}])
-            if tx_row_data['fee_amount']:
-                fee_amount_parts = tx_row_data['fee_amount'].split(',')
-                for part in fee_amount_parts:
-                    # Find the split point between amount and denom
-                    # Assumes denom is alphabetic and at the end
-                    match = re.match(r"(\\d+)([a-zA-Z]+.*)", part)
-                    if match:
-                        amount_val, denom_val = match.groups()
-                        tx_content_json["auth_info"]["fee"]["amount"].append({"denom": denom_val, "amount": amount_val})
-                    else: # Fallback if format is unexpected, store as is if simple
-                        if not any(c.isdigit() for c in part) or not any(c.isalpha() for c in part):
-                             # If it's purely numeric or purely alphabetic, it might be a single coin without explicit split
-                             # This case is less common for multi-coin fees but can happen for single coin like "100000rune"
-                             # For simplicity, we'll skip complex parsing here; common_utils should store it more structured if needed.
-                             pass # Or add a default unknown coin if critical
+    tx_hashes = [row['tx_hash'] for row in tx_rows]
+    
+    # 1. Prefetch all messages for all transactions in this block
+    _ts_prefetch_msgs = time.time()
+    all_block_messages_by_tx_hash = {}
+    if tx_hashes:
+        placeholders = ','.join(['?'] * len(tx_hashes))
+        query_msgs = f"""
+            SELECT tx_hash, message_index, message_type, raw_message_content_json
+            FROM transaction_messages
+            WHERE tx_hash IN ({placeholders})
+            ORDER BY tx_hash, message_index
+        """
+        cursor.execute(query_msgs, tx_hashes)
+        all_messages_for_block = cursor.fetchall()
+        for msg_row in all_messages_for_block:
+            if msg_row['tx_hash'] not in all_block_messages_by_tx_hash:
+                all_block_messages_by_tx_hash[msg_row['tx_hash']] = []
+            all_block_messages_by_tx_hash[msg_row['tx_hash']].append(dict(msg_row))
+    _dur_prefetch_msgs = time.time() - _ts_prefetch_msgs
+
+    # 2. Prefetch all 'transaction_result' events for all transactions in this block
+    _ts_prefetch_events = time.time()
+    all_block_tx_events_by_tx_hash = {}
+    if tx_hashes:
+        placeholders_events = ','.join(['?'] * len(tx_hashes))
+        query_events_attrs = f"""
+            SELECT
+                e.tx_hash, e.event_db_id, e.event_type, e.event_index,
+                ea.attribute_key, ea.attribute_value
+            FROM events e
+            LEFT JOIN event_attributes ea ON e.event_db_id = ea.event_db_id
+            WHERE e.tx_hash IN ({placeholders_events}) AND e.event_category = 'transaction_result'
+            ORDER BY e.tx_hash, e.event_index, e.event_db_id, ea.attribute_index;
+        """
+        cursor.execute(query_events_attrs, tx_hashes)
+        event_attribute_rows = cursor.fetchall()
+        
+        temp_events_with_attrs = {} 
+        for row in event_attribute_rows:
+            tx_hash = row['tx_hash']
+            event_db_id = row['event_db_id']
             
-            # Reconstruct auth_info.signer_infos (Simplified)
-            # We stored only the first signer's pubkey type and bytes.
-            # Full reconstruction would require storing all signer_infos relationally.
-            if tx_row_data['signer_pub_key_type'] and tx_row_data['signer_pub_key_bytes']:
-                signer_info = {
-                    "public_key": {
-                        "@type": tx_row_data['signer_pub_key_type'],
-                        "key": base64.b64encode(tx_row_data['signer_pub_key_bytes']).decode('utf-8')
-                        # sequence and mode_info are harder to get from current DB schema
-                    },
-                    "mode_info": {"single": {"mode": "SIGN_MODE_DIRECT"}}, # Common default
-                    "sequence": "0" # Placeholder, actual sequence not stored this way
+            if tx_hash not in temp_events_with_attrs:
+                temp_events_with_attrs[tx_hash] = {}
+            
+            if event_db_id not in temp_events_with_attrs[tx_hash]:
+                temp_events_with_attrs[tx_hash][event_db_id] = {
+                    'type': row['event_type'],
+                    'event_index': row['event_index'],
+                    'attributes': {}
                 }
-                tx_content_json["auth_info"]["signer_infos"].append(signer_info)
+            if row['attribute_key']:
+                temp_events_with_attrs[tx_hash][event_db_id]['attributes'][row['attribute_key']] = row['attribute_value']
 
-            # 2. Reconstruct 'result' part
-            tx_events = _get_formatted_events_internal(conn, tx_hash=tx_hash, event_category='transaction_result')
-            tx_result = {
-                "log": tx_row_data['log'],
-                "gas_wanted": str(tx_row_data['gas_wanted']) if tx_row_data['gas_wanted'] is not None else "0",
-                "gas_used": str(tx_row_data['gas_used']) if tx_row_data['gas_used'] is not None else "0",
-                "events": tx_events
-                # Mayanode API also includes 'code' if non-zero. Our 'transactions.code' can be used.
-            }
-            if tx_row_data['code'] is not None and tx_row_data['code'] != 0:
-                tx_result['code'] = tx_row_data['code']
-
-            # 3. Assemble final transaction object for the block
-            final_tx_object = {
-                "hash": tx_hash,
-                "height": str(block_height), # Mayanode API includes height in each tx object
-                "tx": tx_content_json,
-                "result": tx_result
-            }
-            formatted_transactions.append(final_tx_object)
+        for tx_hash_key, events_map in temp_events_with_attrs.items():
+            unique_events_list = sorted(list(events_map.values()), key=lambda ev: ev['event_index'])
+            all_block_tx_events_by_tx_hash[tx_hash_key] = [
+                {'type': ev['type'], 'attributes': ev['attributes']} for ev in unique_events_list
+            ]
             
-        return formatted_transactions
-    except sqlite3.Error as e:
-        print(f"SQLite error getting formatted transactions for block {block_height}: {e}")
-        return []
-    except Exception as ex:
-        print(f"Unexpected error getting formatted transactions for block {block_height}: {ex}") # General exception
-        return []
+    _dur_prefetch_events = time.time() - _ts_prefetch_events
+
+    # Parallel processing of transactions
+    _ts_parallel_format = time.time()
+    formatted_transactions = []
+    
+    tx_rows_as_dicts = [dict(row) for row in tx_rows]
+
+    tasks_args = []
+    for tx_data_dict in tx_rows_as_dicts:
+        tasks_args.append((
+            tx_data_dict, 
+            DATABASE_FILE, 
+            block_height,  
+            all_block_messages_by_tx_hash, 
+            all_block_tx_events_by_tx_hash   
+        ))
+
+    MAX_WORKERS = 10 
+
+    if len(tx_rows) > 0:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            results = list(executor.map(run_worker_with_packed_args, tasks_args))
+        formatted_transactions = [res for res in results if res is not None]
+    
+    _dur_parallel_format = time.time() - _ts_parallel_format
+    
+    total_duration = time.time() - _func_start_time
+    # print(f"    [DB TX_FMT_BLK H:{block_height}] Total: {total_duration:.4f}s for {len(formatted_transactions)} TXs (out of {len(tx_rows)} initially).")
+    # print(f"        Sub-timings: InitialTxQuery={_dur_initial_tx_query:.4f}s, PrefetchMsgs={_dur_prefetch_msgs:.4f}s, PrefetchEvents={_dur_prefetch_events:.4f}s, ParallelTxFormat={_dur_parallel_format:.4f}s")
+    
+    return formatted_transactions
 
 # --- Test Functions (Example Usage) ---
 
 def _test_clear_specific_block_data(conn, block_height: int):
     # ... existing code ...
     pass
-
-# --- Dividend Related Queries ---
-
-# Known Mayanode Reserve/Rewards module address(es) that distribute CACAO
-# TODO: Make this configurable or fetch dynamically if possible
-RESERVE_MODULE_ADDRESSES = ["maya1dheycdevq39qlkxs2a6wuuzyn4aqxhve4hc8sm"]
-
-def get_dividend_receiving_addresses(conn) -> list[str]:
-    """
-    Queries the database for unique wallet addresses that have received CACAO dividends.
-    Dividends are identified as 'transfer' events in 'end_block_events' originating
-    from known Reserve/Rewards module addresses.
-    """
-    cursor = conn.cursor()
-    addresses = set()
-
-    # The attributes_json stores a dictionary of attributes for an event.
-    # We need to parse this JSON and look for sender, recipient, and amount.
-    # SQLite's JSON1 extension (json_extract) is very helpful here.
-    # We are looking for events where:
-    # - event_category = 'end_block'
-    # - event_type = 'transfer'
-    # - attributes_json contains a 'sender' attribute matching one of RESERVE_MODULE_ADDRESSES
-    # - attributes_json contains an 'amount' attribute ending with 'cacao'
-    # - We want to extract the 'recipient' attribute.
-
-    query = """
-    SELECT attributes_json
-    FROM events
-    WHERE event_category = 'end_block' AND event_type = 'transfer';
-    """
-    
-    try:
-        cursor.execute(query)
-        for row in cursor.fetchall():
-            attributes_str = row['attributes_json']
-            if not attributes_str:
-                continue
-            
-            try:
-                attributes = json.loads(attributes_str)
-                sender = attributes.get('sender')
-                recipient = attributes.get('recipient')
-                amount_str = attributes.get('amount', '')
-
-                if sender in RESERVE_MODULE_ADDRESSES and \
-                   recipient and \
-                   is_mayanode_address(recipient) and \
-                   amount_str.endswith('cacao') and \
-                   not amount_str.startswith('0cacao'): # Ensure non-zero amount
-
-                    addresses.add(recipient)
-            except json.JSONDecodeError:
-                # print(f"Warning: Could not decode attributes_json: {attributes_str}")
-                continue # Skip malformed JSON
-            except Exception as e:
-                # print(f"Warning: Error processing event attributes: {e}")
-                continue
-                
-    except sqlite3.Error as e:
-        print(f"SQLite error in get_dividend_receiving_addresses: {e}")
-        return [] # Return empty list on error
-
-    return sorted(list(addresses))
-
-def get_dividends_for_address(conn, wallet_address: str) -> list[dict]:
-    """
-    Queries the database for all CACAO dividend transactions for a specific wallet address.
-    Returns a list of dictionaries, each containing block_height, block_time_dt, and amount.
-    """
-    if not is_mayanode_address(wallet_address):
-        print(f"Error: Invalid Mayanode address format for query: {wallet_address}")
-        return []
-
-    cursor = conn.cursor()
-    dividends = []
-
-    # We need to join events with blocks table to get block_time_dt
-    # The filtering logic for sender, recipient, and amount remains similar.
-    query = """
-    SELECT e.attributes_json, b.block_height, b.block_time_dt
-    FROM events e
-    JOIN blocks b ON e.block_height = b.block_height
-    WHERE e.event_category = 'end_block' AND e.event_type = 'transfer';
-    """
-
-    try:
-        cursor.execute(query)
-        for row in cursor.fetchall():
-            attributes_str = row['attributes_json']
-            block_h = row['block_height']
-            block_time = row['block_time_dt'] # This is already a string from DB
-            
-            if not attributes_str:
-                continue
-            
-            try:
-                attributes = json.loads(attributes_str)
-                sender = attributes.get('sender')
-                recipient = attributes.get('recipient')
-                amount_str = attributes.get('amount', '')
-
-                if sender in RESERVE_MODULE_ADDRESSES and \
-                   recipient == wallet_address and \
-                   amount_str.endswith('cacao') and \
-                   not amount_str.startswith('0cacao'):
-                    
-                    # Extract numeric part of amount and convert to integer (or float if necessary)
-                    # Amount is like "12345cacao", so remove "cacao" suffix.
-                    try:
-                        cacao_amount_raw = int(amount_str[:-len('cacao')]) # Assumes 8 decimal places are implicit
-                        # For display, you might want to format this, e.g., divide by 10**8
-                    except ValueError:
-                        # print(f"Warning: Could not parse amount '{amount_str}' to int for block {block_h}")
-                        continue # Skip if amount is not a valid number
-
-                    dividends.append({
-                        "block_height": block_h,
-                        "block_time_dt": block_time, # Already a string in ISO format
-                        "amount_raw_cacao": cacao_amount_raw, # Store raw integer amount
-                        "amount_str_cacao": amount_str # Store original string for reference
-                    })
-            except json.JSONDecodeError:
-                # print(f"Warning: Could not decode attributes_json: {attributes_str} for block {block_h}")
-                continue
-            except Exception as e:
-                # print(f"Warning: Error processing event attributes for block {block_h}: {e}")
-                continue
-
-    except sqlite3.Error as e:
-        print(f"SQLite error in get_dividends_for_address: {e}")
-        return []
-    
-    # Sort by block height descending (most recent first)
-    return sorted(dividends, key=lambda d: d['block_height'], reverse=True)
 
 # --- Insertion Helper Functions (internal, generally not called directly from outside) ---
 
@@ -1609,97 +1698,215 @@ def get_transactions_for_address(conn, address: str, limit: int = 100, offset: i
 # --- Block Reconstruction Function ---
 
 def reconstruct_block_as_mayanode_api_json(conn, block_height: int) -> dict | None:
-    """Reconstructs a full block from the database into a JSON structure that mimics 
-    the Mayanode API '/mayachain/block/{height}' response as closely as possible.
-
-    Args:
-        conn (sqlite3.Connection): Active database connection.
-        block_height (int): The height of the block to reconstruct.
-
-    Returns:
-        dict | None: A dictionary representing the block, or None if the block is not found 
-                      or an error occurs.
-    """
+    recon_overall_start_time = time.time()
+    # print(f"    [DB RECON H:{block_height}] Start") # Keep this high-level start
+    cursor = conn.cursor()
     
-    block_header = get_block_header_data(conn, block_height)
-    if not block_header:
-        print(f"Block {block_height} not found in database for reconstruction.")
+    query_times = {
+        'core_block': 0,
+        'begin_block_events': 0, 
+        'end_block_events': 0,
+        'formatted_txs': 0
+    }
+
+    # 1. Fetch core block info
+    _ts_core_block = time.time()
+    try:
+        cursor.execute("""            SELECT 
+                block_height, block_hash, block_time_str, block_time_dt, 
+                chain_id, proposer_address, data_hash, validators_hash, 
+                next_validators_hash, consensus_hash, app_hash, 
+                last_results_hash, evidence_hash, last_block_hash
+            FROM blocks
+            WHERE block_height = ?
+        """, (block_height,))
+        block_row = cursor.fetchone()
+    except sqlite3.Error as e:
+        print(f"    [DB RECON H:{block_height}] SQL error fetching core block: {e}")
+        return None
+    query_times['core_block'] = time.time() - _ts_core_block
+
+    if not block_row:
+        print(f"    [DB RECON H:{block_height}] Block row not found in 'blocks' table. Returning None.")
         return None
 
-    # Start building the Mayanode API-like structure
-    # Based on observed Mayanode API structure for /mayachain/block/{height}
-    # This might differ slightly from Tendermint's /block or /block_results structure.
-    
-    # The Mayanode API has a top-level structure like:
-    # {
-    #   "id": { "hash": "...", "parts": { "total": ..., "hash": "..." } }, // This is block_id in Tendermint /block
-    #   "header": { "version": ..., "chain_id": ..., "height": ..., ... },
-    #   "data": { "txs": [...] }, // This part is more complex; Mayanode /block gives decoded txs directly.
-    #                               // If our DB stores raw Tendermint txs, this part would be raw b64 strings.
-    #                               // However, our `transactions` table stores `tx_object_json` which is already structured.
-    #   "evidence": { "evidence": [...] },
-    #   "last_commit": { ... }, // Not fully stored in our current `blocks` table in this detail.
-    #   "begin_block_events": [ ... ],
-    #   "end_block_events": [ ... ],
-    #   "txs": [ ... ] // CRITICAL: Mayanode API returns fully formed tx objects HERE at top level.
-    # }
-    # Our `transactions` table stores these tx objects (via `tx_object_json`).
-
-    # The direct Mayanode API (/mayachain/block/{height}) for a specific block seems to be simpler:
-    # It often has: `id`, `
-    reconstructed_block = {}
-
-    # 1. Block ID (simplified - Mayanode API often has parts, but hash is key)
-    reconstructed_block['id'] = {
-        "hash": block_header.get('block_hash')
-        # 'parts' is usually from Tendermint direct /block. Mayanode /mayachain/block often omits it or has null.
-        # We don't store parts, so we'll omit it to match a potentially simpler Mayanode API view.
-    }
-
-    # 2. Header (map fields from our `blocks` table)
-    # Mayanode API header includes a nested 'version': { 'block': '...', 'app': '...' }
-    # We don't store these version sub-fields directly. We'll populate what we have.
-    header_map = {
-        "chain_id": block_header.get('chain_id'),
-        "height": str(block_header.get('block_height')), # Mayanode API uses string for height here
-        "time": block_header.get('block_time_dt') or block_header.get('block_time_str'), # Prefer dt if available
-        "last_block_id": { # Mayanode API has last_block_id.hash
-            "hash": block_header.get('last_block_hash')
-            # "parts": {} // Again, omitting parts as we don't store them
+    reconstructed_block = {
+        'block': {
+            'header': {
+                'version': {
+                    'block': "N/A", # Not in current 'blocks' table schema
+                    'app': "N/A"    # Not in current 'blocks' table schema
+                },
+                'chain_id': block_row['chain_id'],
+                'height': str(block_row['block_height']),
+                'time': block_row['block_time_dt'] if block_row['block_time_dt'] else block_row['block_time_str'],
+                'last_block_id': {
+                    'hash': block_row['last_block_hash'],
+                    'part_set_header': { # Placeholder as details not in 'blocks' table
+                        'total': 0,
+                        'hash': "" 
+                    }
+                },
+                'last_commit_hash': None, # Not in current 'blocks' table schema
+                'data_hash': block_row['data_hash'],
+                'validators_hash': block_row['validators_hash'],
+                'next_validators_hash': block_row['next_validators_hash'],
+                'consensus_hash': block_row['consensus_hash'],
+                'app_hash': block_row['app_hash'],
+                'last_results_hash': block_row['last_results_hash'],
+                'evidence_hash': block_row['evidence_hash'], # May be None if not available
+                'proposer_address': block_row['proposer_address']
+                # 'begin_block_events' and 'end_block_events' are added below
+            },
+            'data': {
+                'txs': [] # Raw base64 tx strings are not stored per transaction in this schema.
+                          # Detailed transactions are in 'formatted_transactions'.
+            },
+            'evidence': { 
+                'evidence': [] # Placeholder, not typically populated from basic block info
+            },
+            'last_commit': { 
+                'height': str(block_row['block_height'] - 1) if block_row['block_height'] and block_row['block_height'] > 0 else "0",
+                'round': None, # Not available
+                'block_id': { 
+                    'hash': block_row['last_block_hash'],
+                    'part_set_header': { # Placeholder
+                        'total': 0,
+                        'hash': ""
+                    }
+                },
+                'signatures': [] # 'block_commits' table not used in this schema
+            }
         },
-        "last_commit_hash": None, # We don't store this directly from `blocks` table.
-                                # Mayanode /mayachain/block often has this as null or omits it.
-                                # Tendermint /block has it as block.last_commit.hash.
-        "data_hash": block_header.get('data_hash'),
-        "validators_hash": block_header.get('validators_hash'),
-        "next_validators_hash": block_header.get('next_validators_hash'),
-        "consensus_hash": block_header.get('consensus_hash'),
-        "app_hash": block_header.get('app_hash'),
-        "last_results_hash": block_header.get('last_results_hash'),
-        "evidence_hash": block_header.get('evidence_hash'), # This is already just the hash string
-        "proposer_address": block_header.get('proposer_address')
-        # Mayanode API might have 'version':{'block': '...', 'app': '...'} - we don't store these currently.
+        'block_id': {
+            'hash': block_row['block_hash'],
+            'part_set_header': { # Placeholder structure
+                'total': 1, 
+                'hash': block_row['block_hash'] 
+            }
+        }
+        # 'formatted_transactions' will be added below at the root level
     }
-    reconstructed_block['header'] = {k: v for k, v in header_map.items() if v is not None}
 
-    # 3. Transactions (fetch and reconstruct)
-    reconstructed_block['txs'] = _get_formatted_transactions_for_block(conn, block_height)
-
-    # 4. Begin Block Events (fetch and format using new helper)
-    reconstructed_block['begin_block_events'] = _get_formatted_events_internal(conn, block_height=block_height, event_category='begin_block')
-
-    # 5. End Block Events (fetch and format using new helper)
-    reconstructed_block['end_block_events'] = _get_formatted_events_internal(conn, block_height=block_height, event_category='end_block')
+    # 2. Fetch and add Formatted Transactions
+    _ts_formatted_txs = time.time()
+    try:
+        formatted_txs = _get_formatted_transactions_for_block(conn, block_height)
+        reconstructed_block['formatted_transactions'] = formatted_txs
+    except Exception as e_ftx: # Catch any error during formatted_tx retrieval
+        print(f"    [DB RECON H:{block_height}] Error getting formatted transactions: {e_ftx}")
+        reconstructed_block['formatted_transactions'] = [] # Default to empty list on error
+    query_times['formatted_txs'] = time.time() - _ts_formatted_txs
     
-    # Optional fields often seen in Mayanode API but not fully captured or structured the same way in our DB:
-    # - `data`: { "txs": null } (if txs are top-level, this is often null or just an empty list if raw txs were there)
-    #           Our `blocks.raw_tx_list_json` could populate this if we were mimicking Tendermint /block more directly.
-    #           But since we aim for `/mayachain/block/{height}` where `txs` is top-level and decoded, this is less relevant.
-    # - `evidence`: { "evidence": [] } (we store only evidence_hash, Mayanode API also usually has just the hash in header)
-    # - `last_commit`: { ... detailed commit info ... } (we only store last_commit_hash indirectly via last_block_id structure,
-    #                                                  Mayanode API often has this as null or omits it at this top block level)
+    # 3. Fetch Begin Block Events
+    _ts_begin_events = time.time()
+    try:
+        begin_block_events = _get_formatted_events_internal(conn, block_height=block_height, event_category='begin_block')
+        reconstructed_block['block']['header']['begin_block_events'] = begin_block_events
+    except Exception as e_bbe:
+        print(f"    [DB RECON H:{block_height}] Error getting begin_block_events: {e_bbe}")
+        reconstructed_block['block']['header']['begin_block_events'] = []
+    query_times['begin_block_events'] = time.time() - _ts_begin_events
 
+    # 4. Fetch End Block Events
+    _ts_end_events = time.time()
+    try:
+        end_block_events = _get_formatted_events_internal(conn, block_height=block_height, event_category='end_block')
+        reconstructed_block['block']['header']['end_block_events'] = end_block_events
+    except Exception as e_ebe:
+        print(f"    [DB RECON H:{block_height}] Error getting end_block_events: {e_ebe}")
+        reconstructed_block['block']['header']['end_block_events'] = []
+    query_times['end_block_events'] = time.time() - _ts_end_events
+    
+    recon_overall_end_time = time.time()
+    total_time_taken = recon_overall_end_time - recon_overall_start_time
+    # print(f"    [DB RECON H:{block_height}] End. Took: {total_time_taken:.4f}s.") # Keep this high-level end
+    # print(f"        Query breakdown H:{block_height}: CoreBlk={query_times['core_block']:.4f}s, FmtdTXs={query_times['formatted_txs']:.4f}s, BeginEvts={query_times['begin_block_events']:.4f}s, EndEvts={query_times['end_block_events']:.4f}s") # Keep breakdown
+    
     return reconstructed_block
+
+def get_latest_blocks_with_details(conn, limit: int = 10) -> list[dict]:
+    func_overall_start_time = time.time()
+    # print(f"    [DB GET_LATEST_BLOCKS] Start, limit={limit}") # Keep this
+    latest_blocks_details = []
+    cursor = conn.cursor()
+    try:
+        _ts_height_query = time.time()
+        cursor.execute("SELECT block_height FROM blocks ORDER BY block_height DESC LIMIT ?", (limit,))
+        rows = cursor.fetchall()
+        time_for_height_query = time.time() - _ts_height_query
+        # print(f"        [DB GET_LATEST_BLOCKS] Heights query took: {time_for_height_query:.4f}s")
+        
+        latest_heights = [row['block_height'] for row in rows]
+        if not latest_heights:
+            # print(f"        [DB GET_LATEST_BLOCKS] No heights found, returning empty list.")
+            return []
+
+        # print(f"        [DB GET_LATEST_BLOCKS] Reconstructing for heights: {latest_heights}")
+        _ts_recon_loop = time.time()
+        total_recon_time_for_all_blocks = 0
+        for i, height in enumerate(latest_heights):
+            _ts_single_recon = time.time()
+            # print(f"            [DB GET_LATEST_BLOCKS] ({i+1}/{len(latest_heights)}) Reconstructing H:{height}...") # A bit too verbose for each block in a loop
+            block_detail = reconstruct_block_as_mayanode_api_json(conn, height) # This now calls the corrected version
+            time_for_single_recon = time.time() - _ts_single_recon
+            total_recon_time_for_all_blocks += time_for_single_recon
+            if block_detail:
+                latest_blocks_details.append(block_detail)
+                # print(f"                [DB GET_LATEST_BLOCKS] ({i+1}/{len(latest_heights)}) H:{height} recon SUCCESS, took {time_for_single_recon:.4f}s")
+            else:
+                print(f"                [DB GET_LATEST_BLOCKS] ({i+1}/{len(latest_heights)}) H:{height} FAILED recon or block not found.") # Keep failure notice
+        time_for_recon_loop = time.time() - _ts_recon_loop
+        # print(f"        [DB GET_LATEST_BLOCKS] Recon loop for {len(latest_heights)} blocks took: {time_for_recon_loop:.4f}s (Sum of individual recons: {total_recon_time_for_all_blocks:.4f}s)")
+
+    except sqlite3.Error as e:
+        print(f"    [DB GET_LATEST_BLOCKS] Database error: {e}")
+        return []
+    except Exception as e_gen: 
+        print(f"    [DB GET_LATEST_BLOCKS] Unexpected error: {e_gen}")
+        return []
+    
+    # print(f"    [DB GET_LATEST_BLOCKS] End. Total time: {time.time() - func_overall_start_time:.4f}s. Found {len(latest_blocks_details)} blocks.") # Keep this
+    return latest_blocks_details
+
+def get_blocks_since_height(conn, from_height: int) -> list[dict]:
+    """Fetches all blocks with block_height strictly greater than from_height,
+    reconstructs them, and returns them sorted by block_height ASCENDING.
+    """
+    func_overall_start_time = time.time()
+    # print(f"    [DB GET_BLOCKS_SINCE H:{from_height}] Start")
+    blocks_details = []
+    cursor = conn.cursor()
+    try:
+        _ts_height_query = time.time()
+        # Fetch heights greater than from_height, in ascending order
+        cursor.execute("SELECT block_height FROM blocks WHERE block_height > ? ORDER BY block_height ASC", (from_height,))
+        rows = cursor.fetchall()
+        time_for_height_query = time.time() - _ts_height_query
+        # print(f"        [DB GET_BLOCKS_SINCE H:{from_height}] Heights query took: {time_for_height_query:.4f}s for {len(rows)} potential new blocks")
+        
+        new_heights = [row['block_height'] for row in rows]
+        if not new_heights:
+            # print(f"        [DB GET_BLOCKS_SINCE H:{from_height}] No new heights found.")
+            return []
+
+        # print(f"        [DB GET_BLOCKS_SINCE H:{from_height}] Reconstructing for new heights: {new_heights}")
+        for height in new_heights: # Heights are already sorted ASC
+            block_detail = reconstruct_block_as_mayanode_api_json(conn, height)
+            if block_detail:
+                blocks_details.append(block_detail)
+            # else: # Log if a specific height failed reconstruction, though reconstruct_block_as_mayanode_api_json has its own logs
+                # print(f"            [DB GET_BLOCKS_SINCE H:{from_height}] Failed to reconstruct new block H:{height}")
+                
+    except sqlite3.Error as e:
+        print(f"    [DB GET_BLOCKS_SINCE H:{from_height}] Database error: {e}")
+        return [] # Return empty list on error
+    except Exception as e_gen: 
+        print(f"    [DB GET_BLOCKS_SINCE H:{from_height}] Unexpected error: {e_gen}")
+        return []
+    
+    # print(f"    [DB GET_BLOCKS_SINCE H:{from_height}] End. Total time: {time.time() - func_overall_start_time:.4f}s. Found {len(blocks_details)} new blocks.")
+    return blocks_details
 
 if __name__ == '__main__':
     # Basic test for the new database utils

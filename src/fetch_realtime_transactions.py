@@ -13,6 +13,19 @@ from typing import Optional, Deque
 from collections import deque
 from tqdm import tqdm
 
+# --- BEGIN relocated sys.path modification ---
+# Ensure the project root is in sys.path for absolute imports from 'src'.
+# This needs to be done before any 'from src...' imports.
+# Using script-specific variable names to avoid potential global conflicts.
+_FRT_SCRIPT_CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+_FRT_SCRIPT_PROJECT_ROOT = os.path.dirname(_FRT_SCRIPT_CURRENT_DIR)
+if _FRT_SCRIPT_PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _FRT_SCRIPT_PROJECT_ROOT)
+# Clean up temporary variables from the global namespace after they've been used.
+del _FRT_SCRIPT_CURRENT_DIR
+del _FRT_SCRIPT_PROJECT_ROOT
+# --- END relocated sys.path modification ---
+
 # Project-specific imports
 from src.api_connections import (
     get_mayanode_latest_block_height, 
@@ -129,18 +142,6 @@ def main():
         help="If set, disables fetching and printing the initial mempool-based next block template."
     )
     parser.add_argument(
-        "--fetch-range", type=str, default=None,
-        help="Fetch a specific range of blocks. Format: START_HEIGHT:END_HEIGHT. Script will exit after attempting to fetch this range."
-    )
-    parser.add_argument(
-        "--fetch-count", type=int, default=None,
-        help="Fetch the last N blocks from the current latest API height. Script will exit after attempting to fetch these blocks."
-    )
-    parser.add_argument(
-        "--target-height", type=int, default=None,
-        help="Fetch blocks sequentially until this height is present in the database. Script will exit after reaching or passing this height, or if an error occurs."
-    )
-    parser.add_argument(
         "--historical-catchup", type=int, metavar="NUM_BLOCKS", default=None,
         help="Fetch the last NUM_BLOCKS from the current API height using concurrent requests. Script will exit after completion."
     )
@@ -152,9 +153,6 @@ def main():
     print(f"Max blocks per cycle: {args.max_blocks_per_cycle}", flush=True)
     if args.start_at_latest: print("Mode: Start at latest API block (continuous mode startup).", flush=True)
     if args.disable_initial_mempool: print("Initial mempool block construction: DISABLED", flush=True)
-    if args.fetch_range: print(f"Mode: Fetch specific range: {args.fetch_range}", flush=True)
-    if args.fetch_count: print(f"Mode: Fetch last {args.fetch_count} blocks.", flush=True)
-    if args.target_height: print(f"Mode: Fetch until DB contains block {args.target_height}.", flush=True)
     if args.historical_catchup: print(f"Mode: Historical catch-up for last {args.historical_catchup} blocks.", flush=True)
 
     conn = None
@@ -182,8 +180,10 @@ def main():
 
             print(f"Targeting blocks from {start_height_catchup} to {end_height_catchup} (inclusive) for historical catch-up: {total_blocks_to_process_in_catchup} blocks total.", flush=True)
             
-            overall_progress_bar = tqdm(total=total_blocks_to_process_in_catchup, unit="block", desc="Historical Catch-up", bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]')
+            overall_progress_bar = tqdm(total=total_blocks_to_process_in_catchup, unit="block", desc="Historical Catch-up", bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]', dynamic_ncols=True, leave=False)
             start_time_catchup = time.time()
+            blocks_fetched_historical = 0
+            blocks_failed_historical = 0
 
             async def run_historical_catchup():
                 nonlocal blocks_fetched_historical, blocks_failed_historical, overall_progress_bar # Allow modification of outer scope vars
@@ -210,14 +210,13 @@ def main():
                                 tasks.append(fetch_block_data_async(session, height))
                                 # heights_for_this_batch_tasks.append(height) # Not strictly needed if results_with_heights gives height
                             else:
-                                # print(f"Block {height} already exists, skipping fetch in this batch.")
-                                overall_progress_bar.update(1) # Count as processed if already exists
-                                overall_progress_bar.set_postfix_str(f"Block {height} exists. Skipped.", refresh=True)
-                                # No need to increment processed_count_in_catchup here, as it's for fetched/processed blocks
-                                # This ensures ETA is based on actual work, not just skipping existing blocks.
+                                # Block already exists, update progress bar and set postfix
+                                overall_progress_bar.set_postfix_str(f"Exists: H{height}", refresh=False) # No need to refresh too often for this
+                                overall_progress_bar.update(1)
+                                # No need to increment processed_count_in_catchup here or blocks_fetched/failed
 
                         if not tasks:
-                            # print("All blocks in this batch already exist or no tasks created. Moving to next batch.")
+                            # All blocks in this batch might already exist.
                             continue
                         
                         results_with_heights = await asyncio.gather(*tasks)
@@ -225,22 +224,20 @@ def main():
                         # print(f"Processing {len(results_with_heights)} fetched results for batch...")
                         for fetched_height, block_data_or_none in results_with_heights:
                             processed_count_in_catchup += 1
-                            current_block_display = f"Processing: {fetched_height}"
+                            current_block_display = f"H{fetched_height}" # Shortened for postfix
                             overall_progress_bar.set_description_str(f"Historical Catch-up") # Reset description before postfix
                             if block_data_or_none is None:
-                                # print(f"No data returned or error during async fetch for block {fetched_height}.")
                                 blocks_failed_historical += 1
-                                overall_progress_bar.set_postfix_str(f"{current_block_display} FAILED (fetch)", refresh=True)
+                                overall_progress_bar.set_postfix_str(f"{current_block_display} FAIL(fetch)", refresh=True)
                             else:
                                 # Pass the overall_progress_bar to fetch_and_store_block for postfix updates
+                                # fetch_and_store_block will use tqdm_bar.write for its own errors if any, or be silent on success
                                 if fetch_and_store_block(conn, fetched_height, raw_block_data_override=block_data_or_none, tqdm_bar=overall_progress_bar):
                                     blocks_fetched_historical += 1
-                                    # Postfix is now set by fetch_and_store_block or the calling loop here
                                     overall_progress_bar.set_postfix_str(f"{current_block_display} OK", refresh=True)
                                 else:
                                     blocks_failed_historical += 1
-                                    overall_progress_bar.set_postfix_str(f"{current_block_display} FAILED (store)", refresh=True)
-                                    # print(f"Failed to store block {fetched_height} during historical catch-up.")
+                                    overall_progress_bar.set_postfix_str(f"{current_block_display} FAIL(store)", refresh=True)
                             overall_progress_bar.update(1)
                             
                             # ETA calculation - Moved inside the loop to update more frequently
@@ -258,146 +255,25 @@ def main():
                                 else:
                                     overall_progress_bar.set_description_str(f"Historical Catch-up") # Default if ETA can't be calc
 
-            blocks_fetched_historical = 0
-            blocks_failed_historical = 0
             asyncio.run(run_historical_catchup())
             
-            overall_progress_bar.close() # Close the progress bar
-
-            print(f"--- Historical Catch-up Task Completed ---", flush=True)
-            print(f"Successfully fetched/stored: {blocks_fetched_historical} blocks.", flush=True)
-            print(f"Failed to fetch/store: {blocks_failed_historical} blocks.", flush=True)
-
-        # --- Specific Fetch Task: --fetch-range ---
-        if args.fetch_range:
-            try:
-                start_str, end_str = args.fetch_range.split(':')
-                start_height = int(start_str)
-                end_height = int(end_str)
-                if start_height <= 0 or end_height < start_height:
-                    raise ValueError("Invalid range. Start height must be > 0 and end height >= start height.")
-                
-                print(f"\n--- Executing Fetch Range: {start_height} to {end_height} ---", flush=True)
-                blocks_in_range_fetched = 0
-                blocks_in_range_failed = 0
-                for height_to_fetch_range in range(start_height, end_height + 1):
-                    if fetch_and_store_block(conn, height_to_fetch_range):
-                        blocks_in_range_fetched += 1
-                    else:
-                        blocks_in_range_failed += 1
-                        print(f"Failed to fetch/store block {height_to_fetch_range}. Continuing with next block in range.", flush=True)
-                    time.sleep(API_REQUEST_DELAY_SECONDS)
-                
-                print(f"--- Fetch Range Task Completed ---", flush=True)
-                print(f"Successfully fetched/stored: {blocks_in_range_fetched} blocks.", flush=True)
-                print(f"Failed to fetch/store: {blocks_in_range_failed} blocks.", flush=True)
-                return
-            except ValueError as e:
-                print(f"Error parsing --fetch-range: {e}. Please use format START_HEIGHT:END_HEIGHT.", flush=True)
-                return
-            except Exception as e:
-                print(f"An unexpected error occurred during fetch-range operation: {e}", flush=True)
-                return
-        
-        # --- Specific Fetch Task: --fetch-count ---
-        elif args.fetch_count:
-            try:
-                count = int(args.fetch_count)
-                if count <= 0:
-                    raise ValueError("Fetch count must be a positive integer.")
-                
-                latest_api_height_fc = get_mayanode_latest_block_height()
-                if latest_api_height_fc is None:
-                    print("Critical: Could not determine latest API block height. Cannot perform fetch-count. Exiting.", flush=True)
-                    return
-                
-                start_height_fc = max(1, latest_api_height_fc - count + 1)
-                end_height_fc = latest_api_height_fc
-                
-                print(f"\n--- Executing Fetch Count: Last {count} blocks (from {start_height_fc} to {end_height_fc}) ---", flush=True)
-                blocks_fetched_count_mode = 0
-                blocks_failed_count_mode = 0
-                for height_to_fetch_count in range(start_height_fc, end_height_fc + 1):
-                    if fetch_and_store_block(conn, height_to_fetch_count):
-                        blocks_fetched_count_mode += 1
-                    else:
-                        blocks_failed_count_mode += 1
-                        print(f"Failed to fetch/store block {height_to_fetch_count} while fetching last {count} blocks. Continuing.", flush=True)
-                    time.sleep(API_REQUEST_DELAY_SECONDS)
-                
-                print(f"--- Fetch Count Task Completed ---", flush=True)
-                print(f"Successfully fetched/stored: {blocks_fetched_count_mode} blocks.", flush=True)
-                print(f"Failed to fetch/store: {blocks_failed_count_mode} blocks.", flush=True)
-                return # Exit after completing the fetch-count task
-            except ValueError as e:
-                print(f"Error with --fetch-count: {e}.", flush=True)
-                return
-            except Exception as e:
-                print(f"An unexpected error occurred during fetch-count operation: {e}", flush=True)
-                return
-
-        # --- Specific Fetch Task: --target-height ---
-        elif args.target_height:
-            try:
-                target_h_val = int(args.target_height)
-                if target_h_val <= 0:
-                    raise ValueError("Target height must be a positive integer.")
-
-                print(f"\n--- Executing Fetch Target Height: Ensuring DB has block {target_h_val} ---", flush=True)
-                blocks_fetched_target_mode = 0
-                blocks_failed_target_mode = 0
-                
-                # Loop as long as the target height is not confirmed in the DB
-                # and we haven't exceeded API limits or encountered persistent errors.
-                current_processing_height = get_latest_block_height_from_db(conn)
-                current_processing_height = (current_processing_height + 1) if current_processing_height else 1
-
-                while not check_if_block_exists(conn, target_h_val):
-                    if current_processing_height > target_h_val:
-                        print(f"Current processing height {current_processing_height} has passed target {target_h_val}, but target not confirmed. Final check.", flush=True)
-                        break # Exit loop for final check below
-                    
-                    latest_api_h_th = get_mayanode_latest_block_height()
-                    if latest_api_h_th is None:
-                        print("Critical: Could not determine latest API block height. Cannot continue target-height task. Retrying in a bit...", flush=True)
-                        time.sleep(args.poll_interval) # Wait before retrying API call
-                        continue 
-                    
-                    if current_processing_height > latest_api_h_th:
-                        print(f"Current processing height ({current_processing_height}) exceeds latest known API height ({latest_api_h_th}). Cannot fetch further towards target {target_h_val} at this time.", flush=True)
-                        break # Exit loop
-
-                    print(f"Attempting to fetch block {current_processing_height} towards target {target_h_val} (API latest: {latest_api_h_th})", flush=True)
-                    if fetch_and_store_block(conn, current_processing_height):
-                        blocks_fetched_target_mode += 1
-                    else:
-                        blocks_failed_target_mode += 1
-                        print(f"Failed to fetch/store block {current_processing_height} while targeting {target_h_val}. Stopping task.", flush=True)
-                        break # Stop on failure
-                    
-                    current_processing_height += 1 # Move to next block
-                    time.sleep(API_REQUEST_DELAY_SECONDS)
-                
-                print(f"--- Fetch Target Height Task Loop Finished ---", flush=True)
-                print(f"Successfully fetched/stored: {blocks_fetched_target_mode} blocks during this task.", flush=True)
-                print(f"Failed to fetch/store: {blocks_failed_target_mode} blocks during this task.", flush=True)
-                # Final check on DB status vs target
-                if check_if_block_exists(conn, target_h_val):
-                    print(f"Confirmed: Target height {target_h_val} is in the database.", flush=True)
-                else:
-                    final_db_latest_th = get_latest_block_height_from_db(conn)
-                    print(f"Warning: Target height {target_h_val} may not have been reached (DB latest: {final_db_latest_th}).", flush=True)
-                return # Exit after completing the target-height task
-            except ValueError as e:
-                print(f"Error with --target-height: {e}.", flush=True)
-                return
-            except Exception as e:
-                print(f"An unexpected error occurred during target-height operation: {e}", flush=True)
-                return
+            overall_progress_bar.close() # Close the progress bar once catch-up is fully done.
+            elapsed_total_catchup = time.time() - start_time_catchup
+            print(f"\n--- Historical Catch-up Task Completed in {elapsed_total_catchup:.2f} seconds ---", flush=True)
+            print(f"Successfully fetched/stored during catch-up: {blocks_fetched_historical} blocks.", flush=True)
+            print(f"Failed to fetch/store during catch-up: {blocks_failed_historical} blocks.", flush=True)
+            print("\n--- Transitioning to Live Block Monitoring ---", flush=True) # Added message
 
         # --- Default Continuous Operation (Gap Filling & Polling) ---
+        # This part executes if no specific mode like --historical-catchup (or the removed ones) was specified.
+        # Or, if --historical-catchup was specified, it would have returned already.
+        # Thus, if we reach here, it means no exit condition was met (like --historical-catchup completion or errors in other modes).
 
-        # 1. Initial Mempool Block (if not disabled)
+        # We need to ensure that if --historical-catchup was *not* specified, the script proceeds to continuous mode.
+        # If args.historical_catchup was specified and completed, the script will have already exited.
+        # So, if we are here, it means no exit condition was met (like --historical-catchup completion or errors in other modes).
+
+        # Initial Mempool Block (if not disabled)
         if not args.disable_initial_mempool:
             print("\n--- Constructing Initial Next Block Template (from Mempool) ---", flush=True)
             next_block_template = construct_next_block_template()
@@ -538,8 +414,7 @@ def main():
         print(f"--- Mayanode Continuous Block Ingestion Service SHUT DOWN: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---", flush=True)
 
 if __name__ == "__main__":
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(current_dir) 
-    if project_root not in sys.path:
-        sys.path.insert(0, project_root)
+    # The sys.path modification logic previously here has been moved to the 
+    # top of the script to ensure 'src.' imports work correctly when the 
+    # script is run directly.
     main()

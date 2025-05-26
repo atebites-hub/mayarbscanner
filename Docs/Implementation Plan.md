@@ -11,9 +11,9 @@ This Implementation Plan is being substantially revised. The project has pivoted
 
 ---
 
-## Phase 10: Generative Block Prediction Model (Mayanode API & Tendermint RPC) - NEW FOCUS
+## Phase 10: Foundational Data Pipeline & Flask Application (Mayanode API & Tendermint RPC) - NEW FOCUS
 
-**Overarching Goal:** Develop an AI model capable of predicting sequences of blocks from the Maya Protocol blockchain, using data fetched directly from the Mayanode API (for confirmed blocks, often pre-decoded) and Tendermint RPC (for confirmed blocks with Protobuf transactions and for mempool data).
+**Overarching Goal:** Develop a robust data pipeline for Mayanode block data and a high-performance Flask application to visualize blocks and mempool activity, serving as a foundation for arbitrage tools and the subsequent AI block prediction model.
 
 **Developer Setup Note: Protobuf Handling (REVISED & STABILIZED)**
 
@@ -75,46 +75,48 @@ This dual approach provides robust decoding for common cases and a reliable fall
     *   **Success Criteria:** Script successfully fetches, decodes, and saves data. Output files allow for manual comparison and verification.
     *   **Status: COMPLETE**
 
-*   **Task 10.2.E: Flask App for Maya (CACAO) Dividend Viewer (New - replaces old 10.2.D)**
-    *   **Description:** Develop a Flask application to display Maya (CACAO) dividend payouts identified from Mayanode blocks. This involves fetching a significant number of blocks, storing them in the database, and then querying/displaying the dividend information.
+*   **Task 10.2.E: Flask App for Real-time Block & Mempool Display (Consolidates previous Flask tasks, DB optimizations, and Mempool viewer)**
+    *   **Description:** Develop a Flask application (`app.py`, `templates/latest_blocks.html`) to display the latest 10 blocks (dynamically updating) and live mempool activity. This task includes the significant database performance optimizations previously tracked under Task 9 (old plan) and the mempool display features previously under Task 10 (old plan).
     *   **Sub-tasks & Status:**
-        *   **10.2.E.1: Research Maya (CACAO) Dividend Identification:** **COMPLETE**
-        *   **10.2.E.2: Enhance Data Ingestion for Bulk Block Fetching (as part of Task 10.2.B):** **COMPLETE** (`fetch_realtime_transactions.py` supports bulk historical catch-up).
-        *   **10.2.E.3: Implement Database Queries for Dividends (`database_utils.py`):** **PENDING**
-        *   **10.2.E.4: Develop Flask Application Structure & Logic (`app.py`):** **PENDING**
-        *   **10.2.E.5: Test End-to-End Pipeline & Data Accuracy:** **PENDING**
-    *   **Status: IN PROGRESS**
+        *   **10.2.E.1: Basic Flask App & Initial Block Display:** Structure `app.py` and `latest_blocks.html`. Implement `get_latest_blocks_with_details`. **(COMPLETE)**
+        *   **10.2.E.2: Dynamic Block Loading & UI Enhancements:** Implement API endpoints (`/api/latest-blocks-data`, `/api/blocks-since/<height>`). Develop JavaScript for dynamic fetching, rendering (10 newest blocks, sorted descending), collapsible sections, and responsive UI. **(COMPLETE)**
+        *   **10.2.E.3: Database Performance Optimization (Old Task 9):** Implement pre-fetching of messages/events in `_get_formatted_transactions_for_block`, enable WAL mode, add necessary indexes. **(COMPLETE - Resulted in 5-9ms single block reconstruction)**
+        *   **10.2.E.4: Mempool Monitoring Display (Old Task 10):** Implement `/api/mempool` endpoint using `fetch_decoded_tendermint_mempool_txs`. Update JavaScript to fetch and render mempool data. **(COMPLETE)**
+        *   **10.2.E.5: Final Testing & Refinement:** Ensure all UI elements work correctly, data updates smoothly, and performance targets are met. **(COMPLETE)**
+    *   **Success Criteria:**
+        *   Flask app serves block and mempool data via robust API endpoints.
+        *   Web UI dynamically displays the 10 latest blocks and live mempool data, with efficient updates and a responsive design.
+        *   **Block reconstruction performance meets arbitrage requirements (5-9ms for single block API responses).**
+    *   **Overall Status for 10.2.E: COMPLETE & VERIFIED**
 
-*   **Task 10.3: Preprocessing for Block Prediction (`preprocess_ai_data.py`)**
-    *   **Description:** Rewrite `src/preprocess_ai_data.py` to load parsed block data, implement feature engineering for block sequences, and generate training artifacts.
+---
+**Phase 11: Generative Block Prediction Model (AI Development) - NEXT FOCUS**
+
+**Overarching Goal:** Develop an AI model capable of predicting sequences of blocks from the Maya Protocol blockchain, using the data pipeline established in Phase 10.
+
+*   **Task 11.1: Preprocessing for Block Prediction (`preprocess_ai_data.py`)**
+    *   **Description:** Rewrite `src/preprocess_ai_data.py` to load parsed block data from the relational database, implement feature engineering for block sequences, and generate training artifacts (`.npz` files, `model_config.json`).
     *   **Status: PENDING**
 
-*   **Task 10.4: Adapt Generative Model for Block Prediction (`model.py`)**
-    *   **Description:** Update `GenerativeTransactionModel` or create `GenerativeBlockModel` in `src/model.py` for block sequence prediction.
+*   **Task 11.2: Adapt Generative Model for Block Prediction (`model.py`)**
+    *   **Description:** Update `GenerativeTransactionModel` or create `GenerativeBlockModel` in `src/model.py` for block sequence prediction. Adjust architecture as needed for block-level features.
     *   **Status: PENDING**
 
-*   **Task 10.5: Update Training Script for Block Model (`train_model.py`)**
-    *   **Description:** Modify `src/train_model.py` to use new block-based data and model.
+*   **Task 11.3: Update Training Script for Block Model (`train_model.py`)**
+    *   **Description:** Modify `src/train_model.py` to use new block-based data, model, and potentially an adapted composite loss function.
     *   **Status: PENDING**
 
-*   **Task 10.6: Develop Evaluation Suite for Block Model (`evaluate_model_block.py` - New File)**
-    *   **Description:** Create script to evaluate block prediction model performance.
+*   **Task 11.4: Develop Evaluation Suite for Block Model (`evaluate_model_block.py` - New File)**
+    *   **Description:** Create a script to evaluate block prediction model performance using appropriate metrics for block-level features.
     *   **Status: PENDING**
 
-*   **Task 10.7: Develop Realtime Inference Suite for Block Prediction (`realtime_inference_block.py` - New File)**
-    *   **Description:** Create script for live block prediction and simulation.
+*   **Task 11.5: Develop Realtime Inference Suite for Block Prediction (`realtime_inference_block.py` - New File)**
+    *   **Description:** Create a script for live block prediction, including preprocessing live data, predicting the next block, and decoding the prediction.
     *   **Status: PENDING**
 
-*   **Task 10.8: Iteration, Refinement, and Documentation (Phase 10)**
-    *   **Description:** Ongoing improvements, bug fixing, performance optimization, and comprehensive documentation.
-    *   **Sub-tasks (examples):**
-        *   Code refactoring and cleanup.
-        *   Performance profiling and optimization.
-        *   Add detailed logging.
-        *   Comprehensive `README.md` updates.
-        *   Maintain `Docs/Implementation Plan.md` and `Docs/Project Requirements.md`.
-        *   Maintain and update `Docs/Python_Protobuf_Decoding_Guide_Mayanode.md` as needed.
-    *   **Status: ONGOING**
+*   **Task 11.6: Iteration, Refinement, and Documentation (Phase 11)**
+    *   **Description:** Ongoing improvements, bug fixing, performance optimization for the AI model, and comprehensive documentation updates related to Phase 11.
+    *   **Status: PENDING (will be ONGOING)**
 
 ## Risks and Mitigations
 - **Risk:** `edit_file` tool instability. (Mitigation: Simpler edits, careful verification).
@@ -123,6 +125,6 @@ This dual approach provides robust decoding for common cases and a reliable fall
 - **Risk:** New or variant Protobuf messages requiring decoding adjustments. (Mitigation: Established `betterproto` workflow and `protoc --decode` fallback are adaptable. The guide provides a strong foundation).
 
 ## Next Steps
-- **Current Focus:** Begin development of **Task 10.2.E.3: Implement Database Queries for Dividends** as part of the Flask application task.
-- Proceed with remaining sub-tasks for the Flask App (10.2.E.4, 10.2.E.5).
-- Then move to **Task 10.3: Preprocessing for Block Prediction**.
+- **Phase 10 is now complete.** The foundational data pipeline and high-performance Flask visualization application are fully functional.
+- **Current Focus: Begin development of Phase 11: Generative Block Prediction Model.**
+- Starting with **Task 11.1: Preprocessing for Block Prediction (`preprocess_ai_data.py`)**.

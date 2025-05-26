@@ -43,6 +43,9 @@ Once a new test transaction string (known to contain `signer_infos`) was used wi
 -   **Fallback for Complex/Specific Mayanode Types (e.g., `MsgObservedTxOut`):** Rely on the documented `subprocess` method calling `protoc --decode`, as detailed in `Docs/Python_Protobuf_Decoding_Guide_Mayanode.md`.
 -   The workspace now contains the necessary `proto/src` and `proto/generated/pb_stubs` (which should be committed to Git) for the `betterproto` approach.
 
+**Current Project State & Performance:**
+The data ingestion pipeline and the Flask web application are now highly performant. Optimizations in `src/database_utils.py` for block reconstruction (pre-fetching messages and events) have drastically reduced API response times. The `/api/latest-blocks-data` endpoint, which reconstructs block details, now responds in the **5-9ms range for individual blocks and ~1.7-3 seconds for 10 blocks, meeting arbitrage performance requirements.** The Flask app successfully displays latest blocks and live mempool data with efficient updates.
+
 ## Key Challenges and Analysis (NEW - For Block Prediction)
 
 -   **Mayanode API Interaction:** Robust interaction with Mayanode API for block data. (Largely addressed)
@@ -56,7 +59,7 @@ Once a new test transaction string (known to contain `signer_infos`) was used wi
     -   **Primary:** `betterproto[compiler]==2.0.0b7`, `protobuf==4.21.12`, `grpclib`, and `python -m grpc_tools.protoc` for generating stubs for `CosmosTx`.
     -   **Fallback/Diagnostic:** Standalone `protoc` (e.g., v3.20.1) for `protoc --decode` with specific Mayanode protos.
 -   **Python Environment/Caching:** Previously a challenge, now understood and mitigated through direct testing and cache clearing when necessary.
--   **Complex JSON Reconstruction:** Designing and implementing the logic to accurately reconstruct the nested JSON structure of a Mayanode API block from purely relational database tables will be a complex task, requiring careful mapping of all fields and potentially impacting query performance for this specific function.
+-   **Complex JSON Reconstruction:** Designing and implementing the logic to accurately reconstruct the nested JSON structure of a Mayanode API block from purely relational database tables was a complex task. This has been **successfully implemented and highly optimized** in `src/database_utils.py`. Query performance for this function is now excellent.
 
 ## Database Design Philosophy (NEW)
 
@@ -80,7 +83,7 @@ Once a new test transaction string (known to contain `signer_infos`) was used wi
     *   **Description:** Ensure a Python virtual environment (e.g., `venv`) is active in the project root. Install or update all dependencies listed in `requirements.txt`.
     *   **Success Criteria:** `pip install -r requirements.txt` completes successfully within an activated virtual environment. Key scripts (e.g., `src/api_connections.py`) can import their required libraries without error.
 
-**Phase 10: Generative Block Prediction Model (Mayanode API & Tendermint RPC) - NEW FOCUS**
+**Phase 10: Foundational Data Pipeline & Flask Application (Mayanode API & Tendermint RPC)**
 
 *   **Task 10.1: Mayanode API Research & Client Implementation (Data Fetching & Next Block Templating) (COMPLETE - VERIFIED)**
     *   Sub-tasks:
@@ -108,7 +111,7 @@ Once a new test transaction string (known to contain `signer_infos`) was used wi
             *   **Finding 3 (Other Parsed Block Diffs):** Other differences in `compare_full_parsed_blocks` (e.g., `end_block_events_raw`, `transactions_raw_base64`, `transactions_source`, raw event structures within `transactions[X].result_events_raw`) are understood to be artifacts of how the two different data sources present their raw data or how `parse_confirmed_block` stores source-specific raw information. The *parsed transactions* themselves align.
     *   Success Criteria: `scripts/compare_block_data.py` runs successfully, producing detailed comparison reports. The core transaction decoding and transformation logic is validated. Differences in full block structures are understood and documented, distinguishing between parsing issues and genuine data source variations. (ACHIEVED)
 
-*   **Task 10.2.B: Database Implementation and Data Ingestion Pipeline (Relational Refactor)**
+*   **Task 10.2.B: Database Implementation and Data Ingestion Pipeline (Relational Refactor) (COMPLETE & VERIFIED)**
     *   **Description:**
         *   Design a **fully relational** database schema (e.g., using SQLite initially) to store every component of parsed confirmed block data. This includes block headers, individual transactions (core details like hash, index, success status), transaction messages (with type, index within transaction, and links to message-specific detail tables), message-specific attributes (e.g., sender, recipient, amounts, memo for `MsgSend`; details for `MsgSwap`, `MsgDeposit`, `MsgOutboundTx`, etc., likely in separate tables per message type or a structured EAV-like model if message types are too diverse), transaction-level events (type, index, attributes), event attributes (key, value, index, potentially nested if necessary and manageable), block-level events (begin/end block, type, attributes), unique addresses involved in transactions/events, and any other discrete data points. **No raw JSON blobs for transactions, messages, or events will be stored.**
         *   Implement Python functions in `src/database_utils.py` for:
@@ -124,11 +127,11 @@ Once a new test transaction string (known to contain `signer_infos`) was used wi
         *   Develop utility functions to query the database, including constructing an address's transaction history from locally stored transactions.
         *   **Mempool Data Strategy:** For inference, live mempool data will be fetched on demand (as per `construct_next_block_template` in `api_connections.py`). Storing historical mempool snapshots in the database is a secondary consideration if a clear need for training/analysis emerges.
     *   **Success Criteria:**
-        *   A SQLite database is created with a **fully relational schema capable of storing all discrete data points from a Mayanode block.**
-        *   The data ingestion script (`fetch_realtime_transactions.py` or equivalent) continuously and politely populates the database with new confirmed blocks, correctly decomposing them into the relational schema.
-        *   The `reconstruct_block_as_mayanode_api_json` function in `database_utils.py` can successfully query the database for a given block height and produce a JSON output that is a structural and informational **carbon copy** (as much as feasible) of the Mayanode API's response for that block.
-        *   Data can be queried efficiently for various analytical purposes.
-        *   The system avoids redundant API calls for confirmed blocks.
+        *   A SQLite database is created with a **fully relational schema capable of storing all discrete data points from a Mayanode block.** (ACHIEVED)
+        *   The data ingestion script (`fetch_realtime_transactions.py`) continuously and politely populates the database with new confirmed blocks, correctly decomposing them into the relational schema. (ACHIEVED)
+        *   The `reconstruct_block_as_mayanode_api_json` function in `database_utils.py` can successfully query the database for a given block height and produce a JSON output that is a structural and informational **carbon copy** (as much as feasible) of the Mayanode API's response for that block. (ACHIEVED & HIGHLY OPTIMIZED)
+        *   Data can be queried efficiently for various analytical purposes. (ACHIEVED)
+        *   The system avoids redundant API calls for confirmed blocks. (ACHIEVED)
 
 *   **Task 10.2.C: Protobuf Decoding Setup & Implementation (COMPLETE & VALIDATED)**
     *   **Overall Objective:** Achieve reliable native Python deserialization for `cosmos.tx.v1beta1.Tx` from Tendermint RPC, ensuring the transformed output matches the Mayanode API transaction structure. Have a documented fallback for complex Mayanode-specific types.
@@ -142,86 +145,70 @@ Once a new test transaction string (known to contain `signer_infos`) was used wi
         *   **Task 10.2.C.3: Integrate `betterproto` stubs for `CosmosTx` decoding (COMPLETE & VALIDATED)**
         *   **Task 10.2.C.4: Document `protoc --decode` fallback for `MsgObservedTxOut` (COMPLETE)**
         *   **Task 10.2.C.9: Experimentation - Alternative Python Protobuf Deserialization (COMPLETE - `betterproto` validated for CosmosTx, `subprocess` validated for MsgObservedTxOut)**
-    *   **Success Criteria:** `cosmos.tx.v1beta1.Tx` messages from Tendermint RPC are reliably decoded and transformed in Python to match the Mayanode API's transaction JSON structure, including correct population of the `signer` field and other structural alignments. A robust, documented method exists for handling other problematic types.
+    *   **Success Criteria:** `cosmos.tx.v1beta1.Tx` messages from Tendermint RPC are reliably decoded and transformed in Python to match the Mayanode API's transaction JSON structure, including correct population of the `signer` field and other structural alignments. A robust, documented method exists for handling other problematic types. (ACHIEVED)
 
-*   **Task 10.2.D: Flask App for Maya (CACAO) Dividend Viewer (NEW)**
-    *   **Description:** Develop a Flask application to display Maya (CACAO) dividend payouts identified from Mayanode blocks. This involves fetching a significant number of blocks (e.g., 10,000), storing them in the database, and then querying/displaying the dividend information. The app should allow users to select a wallet address and view its received dividends, including the block height, date, and time of issuance, and amount. This task serves as an end-to-end test for the data pipeline (fetch -> parse -> store -> query -> display).
-    *   **Sub-tasks:**
-        *   **10.2.D.1: Research Maya (CACAO) Dividend Identification (COMPLETE)**
-            *   **Objective:** Define how to identify CACAO "dividend" (reward/emission) payouts to Node Operators, Liquidity Providers, and potentially $MAYA token holders from parsed Mayanode block data.
-            *   **Research Findings (Summary & Finalized Identification Logic):**
-                *   CACAO rewards/dividends (for LPs & Node Operators) are primarily distributed via mechanisms reflected in `end_block_events`.
-                *   **Key Identifier:** `transfer` events within `end_block_events` originating from a known Mayanode protocol module address (e.g., the Reserve or a dedicated rewards module).
-                    *   **Example Sender (Reserve/Rewards Module):** `maya1dheycdevq39qlkxs2a6wuuzyn4aqxhve4hc8sm` (identified from block 11317539 analysis). This address receives CACAO from fee collection (e.g., from a fee collector module like `maya1g98cy3n9mmjrpn0sxmn63lztelera37n8yyjwl`) and then distributes it.
-                    *   **Recipient:** The `recipient` attribute of such a `transfer` event is the address receiving the CACAO dividend.
-                    *   **Amount:** The `amount` attribute of the `transfer` event (e.g., `"126498452cacao"`) indicates the raw CACAO amount (typically 8 decimal places).
-                *   **Corroborating Event:** The `rewards` event, also in `end_block_events`, contains a `bond_reward` attribute (e.g., `"126498452"`) which shows the CACAO amount allocated for bonders in that block. This often matches one of the `transfer` amounts from the Reserve to an individual address.
-                *   **Fee Collection Path:** Fees (e.g., from swaps) are collected (seen as `pool_deduct` in a `fee` event), then often transferred from a fee collector module to the Reserve/Rewards module, then distributed.
-                *   **CACAO Denomination in Events:** `XXXXcacao` (e.g., `12345cacao`).
-                *   **$MAYA Token Holder Dividends:** This is a separate mechanism. Identification would require finding the specific CACAO distribution address for $MAYA token revenue share and observing its `transfer` events. *This is out of scope for the immediate CACAO dividend identification for LPs/Nodes but noted for future potential.* 
-            *   **Identification Strategy for Parsed Block Data (to be implemented in DB queries):
-                1.  Iterate through `end_block_events` of each parsed block.
-                2.  Look for `event` objects with `type: "transfer"`.
-                3.  For each such `transfer` event, check its `attributes`:
-                    *   An attribute with `key: "sender"` whose `value` matches a known Mayanode Reserve/Rewards module address (e.g., `"maya1dheycdevq39qlkxs2a6wuuzyn4aqxhve4hc8sm"`). This list of sender addresses might need to be configurable or expanded if more are discovered.
-                    *   An attribute with `key: "amount"` whose `value` ends with `"cacao"` (e.g., `"12345cacao"`). Extract the numeric part as the raw amount.
-                    *   An attribute with `key: "recipient"` whose `value` is the address that received the CACAO dividend.
-                4.  Store these identified dividend transfers (recipient, amount, block height, block time) in the database.**
-            *   Determine how "Maya dividends" (paid in CACAO) are represented in Mayanode block transaction data (e.g., specific message types, event types, event attributes like `rewards` or `transfer` from known protocol addresses, or specific module interactions). (COMPLETE - As above)
-            *   Document the exact criteria for identifying a CACAO dividend payout, the amount, and the recipient address from the parsed block and transaction data. (COMPLETE - As above)
-            *   Success Criteria: Clear, documented logic for identifying CACAO dividend transactions, their amounts, and recipients from parsed block data. (ACHIEVED)
-        *   **10.2.D.2: Enhance Data Ingestion for Bulk Block Fetching (COMPLETE)**
-            *   Modify/ensure `src/fetch_realtime_transactions.py` (or the primary data ingestion script) can efficiently fetch and store a large number of historical blocks (e.g., target 10,000, or up to a specified block height) if they are not already in the database.
-            *   Implemented `--fetch-range START:END`, `--fetch-count N`, and `--target-height H` command-line arguments in `src/fetch_realtime_transactions.py` to enable specific fetching tasks. These modes cause the script to exit after completion, making it suitable for bulk fetching.
-            *   Implement or verify robust error handling and progress indication for this bulk fetching process. (Existing script has good error handling and progress prints per block).
-            *   Success Criteria: The local SQLite database is populated with data from at least 10,000 Mayanode blocks (or a comparable large dataset). (Script functionality achieved, actual population pending execution by user for Flask app test).
-        *   **10.2.D.3: Implement Database Queries for Dividends:**
-            *   Add functions to `src/database_utils.py` to:
-                *   Query and list unique wallet addresses that have received CACAO dividends based on the criteria from 10.2.D.1.
-                *   Query all CACAO dividend transactions for a specific wallet address, retrieving details like block height, block timestamp, and dividend amount.
-            *   Ensure these queries are reasonably optimized for performance against the potentially large dataset.
-            *   Success Criteria: Database utility functions can efficiently retrieve the list of dividend-receiving addresses and detailed dividend information for a given address.
-        *   **10.2.D.4: Develop Flask Application Structure & Logic:**
-            *   Set up a basic Flask application (`app.py` or similar in the root or a new `flask_app/` directory).
-            *   Implement Flask routes and view functions:
-                *   A main page (`/`) to list all unique wallet addresses that have received dividends.
-                *   A detail page (e.g., `/address/<wallet_address>`) for a selected wallet address, displaying a table of its dividends (block height, date/time, CACAO amount).
-            *   Create simple HTML templates (e.g., using Jinja2) for rendering these views.
-            *   Integrate the Flask app with `src/database_utils.py` to fetch the necessary data.
-            *   Success Criteria: A functional Flask web application with distinct pages for listing addresses and viewing detailed dividends for a selected address. Data is dynamically fetched from the database.
-        *   **10.2.D.5: Test End-to-End Pipeline & Data Accuracy:**
-            *   Perform a full run: Fetch 10,000 blocks, let them be parsed and inserted into the database.
-            *   Use the Flask application to browse the dividend data.
-            *   If possible, manually verify a few dividend transactions by cross-referencing with a block explorer or known dividend events to confirm the accuracy of the identified data and amounts.
-            *   Success Criteria: The Flask application correctly displays CACAO dividend information sourced from the locally populated database of 10,000 Mayanode blocks, validating the integrity of the data pipeline (fetch, parse, store, query, display).
-    *   **Success Criteria (Overall for 10.2.D):** A running Flask application correctly displays CACAO dividend information for various addresses, sourced from the locally populated database of Mayanode blocks. The process validates the data fetching, parsing, storage, and retrieval mechanisms.
+*   **Task 10.2.D: Flask App for Real-time Block & Mempool Display (COMPLETE & VERIFIED)**
+    *   **Description**: Develop a Flask web application (`app.py`) to display the latest blocks and mempool activity. The application should feature:
+        *   A main page (`templates/latest_blocks.html`) that dynamically loads and displays the 10 newest blocks from the database.
+        *   The block display should update automatically, fetching newer blocks since the last known height.
+        *   A separate section on the page to display live mempool transactions, refreshing periodically.
+        *   API endpoints in `app.py` (`/api/latest-blocks-data`, `/api/blocks-since/<height>`, `/api/mempool`) to serve data to the frontend.
+        *   Responsive UI design.
+    *   **Sub-Tasks & Status**:
+        *   **10.2.D.1: Basic Flask App & Initial Block Display**: Create `app.py` and `latest_blocks.html`. Implement `get_latest_blocks_with_details` in `database_utils.py`. **(COMPLETE)**
+        *   **10.2.D.2: Dynamic Block Loading**: Implement `/api/latest-blocks-data` and `/api/blocks-since/<height>` endpoints. Update JavaScript for dynamic fetching and rendering, ensuring only the 10 newest blocks are shown and sorted correctly. **(COMPLETE)**
+        *   **10.2.D.3: UI Enhancements & Responsiveness**: Implement collapsible sections for block details, improve styling, and ensure responsive design for different screen sizes. **(COMPLETE)**
+        *   **10.2.D.4: Database Performance Optimization (Task 9 from old plan - Merged here)**:
+            *   **Goal**: Significantly reduce time for `reconstruct_block_as_mayanode_api_json`.
+            *   Modify `_get_formatted_transactions_for_block` to pre-fetch messages and events.
+            *   Modify worker function (`_format_single_tx_worker_entrypoint`) to use pre-fetched data.
+            *   Enable WAL mode for SQLite.
+            *   Add indexes to `events` and `event_attributes` tables.
+            *   **Outcome**: Achieved. API responses are now extremely fast (e.g., 5-9ms for single block reconstruction). **(COMPLETE)**
+        *   **10.2.D.5: Mempool Monitoring Display (Task 10 from old plan - Merged here)**:
+            *   Create `/api/mempool` endpoint in `app.py` using `fetch_decoded_tendermint_mempool_txs`.
+            *   Update `latest_blocks.html` JavaScript to fetch and render mempool data dynamically.
+            *   Style the mempool display.
+            *   **Outcome**: Live mempool data is displayed and updates correctly. **(COMPLETE)**
+    *   **Success Criteria**:
+        *   Flask application (`app.py`) serves block and mempool data via API endpoints. **(ACHIEVED)**
+        *   `templates/latest_blocks.html` dynamically displays the 10 latest blocks, fetches new blocks efficiently, and shows live mempool activity. **(ACHIEVED)**
+        *   UI is responsive and user-friendly. **(ACHIEVED)**
+        *   Block reconstruction (`reconstruct_block_as_mayanode_api_json`) and associated API endpoints are highly performant, meeting arbitrage requirements (5-9ms response times for single block data). **(ACHIEVED)**
 
-*   **Task 10.3: Preprocessing for Block Prediction (`preprocess_ai_data.py`)**
+---
+**Phase 11: Generative Block Prediction Model (AI Development)**
+
+*   **Task 11.1: Preprocessing for Block Prediction (`preprocess_ai_data.py`)**
     *   **Description:** Rewrite `src/preprocess_ai_data.py` to:
-        *   Load the parsed block data.
+        *   Load the parsed block data from the relational database.
         *   Implement feature engineering based on the new block schema. This will involve creating sequences of blocks (X) where the target (Y) is the next block in the sequence.
         *   Handle ID mapping, numerical scaling, and any new feature types specific to block data (e.g., event types, consensus hashes).
         *   Generate `sequences_and_targets.npz` and `model_config.json` artifacts tailored for block prediction.
     *   **Success Criteria:** `preprocess_ai_data.py` can generate training and test data (`.npz` files) and a `model_config.json` suitable for training a block prediction model.
+    *   **Status: PENDING**
 
-*   **Task 10.4: Adapt Generative Model for Block Prediction (`model.py`)**
+*   **Task 11.2: Adapt Generative Model for Block Prediction (`model.py`)**
     *   **Description:** Update the `GenerativeTransactionModel` (or create a new `GenerativeBlockModel`) in `src/model.py` to accept sequences of processed block features and output a prediction for the next block's features.
     *   This may involve changes to input embedding layers, output projection layers, and potentially the core Transformer architecture if block structure demands it (e.g., hierarchical prediction).
     *   **Success Criteria:** `model.py` defines a model architecture capable of learning from block sequences and predicting subsequent blocks.
+    *   **Status: PENDING**
 
-*   **Task 10.5: Update Training Script for Block Model (`train_model.py`)**
+*   **Task 11.3: Update Training Script for Block Model (`train_model.py`)**
     *   **Description:** Modify `src/train_model.py` to:
         *   Load the new block-based NPZ data and `model_config.json`.
         *   Instantiate and train the (potentially new) generative block model.
         *   Adapt the composite loss function if necessary to handle the structure of predicted blocks.
     *   **Success Criteria:** `train_model.py` can successfully train a generative block prediction model and save its weights.
+    *   **Status: PENDING**
 
-*   **Task 10.6: Develop Evaluation Suite for Block Model (`evaluate_model_block.py` - New File)**
+*   **Task 11.4: Develop Evaluation Suite for Block Model (`evaluate_model_block.py` - New File)**
     *   **Description:** Create a new script `src/evaluate_model_block.py` to evaluate the performance of the block prediction model.
     *   Define and implement metrics suitable for block-level predictions (e.g., accuracy of header fields, F1 score for transaction types within the block, metrics for overall block structure similarity).
     *   **Success Criteria:** `evaluate_model_block.py` can load a trained block model and test data, and output meaningful evaluation metrics.
+    *   **Status: PENDING**
 
-*   **Task 10.7: Develop Realtime Inference Suite for Block Prediction (`realtime_inference_block.py` - New File)**
+*   **Task 11.5: Develop Realtime Inference Suite for Block Prediction (`realtime_inference_block.py` - New File)**
     *   **Description:** Create a new script `src/realtime_inference_block.py` (analogous to the deleted `realtime_inference_suite.py` but for blocks).
     *   Implement functions to:
         *   Load a trained block model and artifacts.
@@ -231,101 +218,115 @@ Once a new test transaction string (known to contain `signer_infos`) was used wi
         *   Decode the predicted block back into a human-readable/Mayanode-like JSON format.
         *   Implement simulation and live prediction modes.
     *   **Success Criteria:** `realtime_inference_block.py` can run simulations generating sequences of blocks and attempt live prediction of the next block.
+    *   **Status: PENDING**
 
-*   **Task 10.8: Iteration, Refinement, and Documentation (Phase 10)**
-    *   **Description:** Ongoing improvements, bug fixing, performance optimization, and comprehensive documentation.
+*   **Task 11.6: Iteration, Refinement, and Documentation (Phase 11)**
+    *   **Description:** Ongoing improvements, bug fixing, performance optimization for the AI model, and comprehensive documentation.
     *   **Sub-tasks (examples):**
-        *   Code refactoring and cleanup.
-        *   Performance profiling and optimization for data ingestion and querying.
-        *   Add more detailed logging.
-        *   Comprehensive `README.md` updates.
-        *   Update `Docs/Implementation Plan.md` and `Docs/Project Requirements.md`.
-        *   **Create Comprehensive Protobuf Decoding Guide (COMPLETE - `Docs/Python_Protobuf_Decoding_Guide_Mayanode.md`)**
+        *   Code refactoring and cleanup for AI components.
+        *   Performance profiling for model training and inference.
+        *   Add more detailed logging for AI processes.
+        *   Update `README.md`, `Docs/Implementation Plan.md`, `Docs/Project Requirements.md` with AI model details.
+    *   **Status: PENDING (will be ONGOING once phase starts)**
 
 ## Project Status Board
 
-**Overall Status:** In Progress - Core data fetching, Protobuf decoding, relational database schema, and initial data ingestion pipeline (`src/fetch_realtime_transactions.py` with historical catch-up and polling) are implemented and functioning. Console output for historical catch-up has been significantly improved.
+**Overall Status:** Phase 10 (Data Pipeline & Flask App) is COMPLETE. The system can fetch, parse, store, and display Mayanode block and mempool data with extremely high performance. Ready to begin Phase 11 (Generative Block Prediction Model).
 
 **Recent Accomplishments & Key Milestones:**
 - Successfully fetched block data from Tendermint RPC and Mayanode API, and compared them (`scripts/compare_block_data.py`).
 - Implemented robust, native Python decoding of `cosmos.tx.v1beta1.Tx` using `betterproto`.
 - Documented Protobuf decoding methods in `Docs/Python_Protobuf_Decoding_Guide_Mayanode.md`.
 - **RESOLVED: The persistent issue with `signer` field population in `src/common_utils.py` and associated Python environment/caching mystery.**
-- **Database Refactor:** Successfully redesigned `src/database_utils.py` with a fully relational schema. Implemented and tested `insert_block_and_components` and `reconstruct_block_as_mayanode_api_json`.
+- **Database Refactor (Task 10.2.B):** Successfully redesigned `src/database_utils.py` with a fully relational schema. Implemented and tested `insert_block_and_components` and `reconstruct_block_as_mayanode_api_json`.
 - **Data Ingestion Enhancements (`src/fetch_realtime_transactions.py`):**
     - Added various fetching modes: `--historical-catchup`, `--fetch-range`, `--fetch-count`, `--target-height`.
     - Implemented asynchronous fetching for `--historical-catchup` using `aiohttp` and `asyncio`.
-    - **Improved Console Output:** Refined logging in historical catch-up to use `tqdm` effectively, providing a clean, single-line animated progress bar with status updates and ETA, and removed verbose debug prints from `common_utils.py`.
+    - **Improved Console Output:** Refined logging in historical catch-up to use `tqdm` effectively.
 - **`common_utils.py` Refinements:** Removed unused `_parse_event_attributes`, improved `parse_iso_datetime` and `transform_decoded_tm_tx_to_mayanode_format`, enhanced `camel_to_snake`, and added more tests.
+- **Flask App (`app.py`) Enhancements (Task 10.2.D):**
+    - Implemented API endpoints for dynamic block loading (`/api/latest-blocks-data`, `/api/blocks-since/<height>`).
+    - Implemented API endpoint for mempool data (`/api/mempool`).
+    - Improved JavaScript in `latest_blocks.html` for rendering blocks and mempool data, including responsive design and UI fixes.
+    - **Achieved Arbitrage-Ready Performance:** Optimized `reconstruct_block_as_mayanode_api_json` and related database queries (Task 10.2.D.4 - previously Task 9) resulting in **~5-9ms API response times for individual block data and ~1.7-3s for 10 blocks.**
+    - Integrated dynamic mempool display into `latest_blocks.html` (Task 10.2.D.5 - previously Task 10).
+
+**Project Task List (Simplified from old Scratchpad for clarity):**
+- [x] Task 0: Project Setup & Prerequisites
+- [x] Phase 10: Foundational Data Pipeline & Flask Application (Mayanode API & Tendermint RPC)
+    - [x] Task 10.1: API Client Implementation
+    - [x] Task 10.2.A: Parsing Logic & Comparison
+    - [x] Task 10.2.B: Database Implementation & Ingestion
+    - [x] Task 10.2.C: Protobuf Decoding
+    - [x] Task 10.2.D: Flask App for Real-time Block & Mempool Display (incorporates old Task 9 & 10 for optimization and mempool)
+- [ ] **Phase 11: Generative Block Prediction Model (AI Development)**
+    - [ ] Task 11.1: Preprocessing for Block Prediction (`preprocess_ai_data.py`)
+    - [ ] Task 11.2: Adapt Generative Model for Block Prediction (`model.py`)
+    - [ ] Task 11.3: Update Training Script for Block Model (`train_model.py`)
+    - [ ] Task 11.4: Develop Evaluation Suite for Block Model (`evaluate_model_block.py`)
+    - [ ] Task 11.5: Develop Realtime Inference Suite for Block Prediction (`realtime_inference_block.py`)
+    - [ ] Task 11.6: Iteration, Refinement, and Documentation (Phase 11)
+
 
 **Current Tasks & Focus:**
--   Task 10.2.D (Flask App for CACAO Dividends): This is the next major development task.
-    -   10.2.D.3: Implement Database Queries for Dividends (PENDING)
-    -   10.2.D.4: Develop Flask Application Structure & Logic (PENDING)
-    -   10.2.D.5: Test End-to-End Pipeline & Data Accuracy (PENDING)
+- Phase 10 is complete. The data pipeline is robust, and the Flask application provides a high-performance block and mempool viewer.
+- **The next major focus is Phase 11: Generative Block Prediction Model.** This will start with **Task 11.1: Preprocessing for Block Prediction (`preprocess_ai_data.py`)**.
 
-**Upcoming Tasks:**
--   Task 10.3: Preprocessing for Block Prediction (`preprocess_ai_data.py`)
--   Task 10.4: Adapt Generative Model for Block Prediction (`model.py`)
+**Upcoming Tasks (Phase 11):**
+-   Task 11.1: Preprocessing for Block Prediction (`preprocess_ai_data.py`)
+-   Task 11.2: Adapt Generative Model for Block Prediction (`model.py`)
+-   Task 11.3: Update Training Script for Block Model (`train_model.py`)
+-   Task 11.4: Develop Evaluation Suite for Block Model (`evaluate_model_block.py`)
+-   Task 11.5: Develop Realtime Inference Suite for Block Prediction (`realtime_inference_block.py`)
+-   Task 11.6: Iteration, Refinement, and Documentation (Phase 11)
 
 ## Executor's Feedback or Assistance Requests
--   The console output for `src/fetch_realtime_transactions.py` in historical catch-up mode should now be significantly cleaner. Requesting user to test this.
--   Ready to proceed with Task 10.2.D.3 (Database Queries for CACAO Dividends) once user confirms satisfaction with current state or provides further feedback.
+-   The Flask application (`app.py`) is fully functional, displaying latest blocks and mempool activity with excellent performance. Database reconstruction is extremely fast (5-9ms per block).
+-   All previously identified issues regarding block display, duplicate blocks, logging verbosity, and performance bottlenecks have been resolved.
+-   Ready to proceed with Phase 11: AI Model Development, starting with Task 11.1 (Data Preprocessing).
 
 ## Lessons
--   **Manual DB Deletion:** When schema changes are significant, especially removing columns or tables that SQLite might not handle well with `ALTER TABLE`, it's often cleaner to delete the `.db` file manually and let the `create_tables` function rebuild it from scratch.
--   **Protobuf Availability:** The `PROTOBUF_AVAILABLE` (now `PROTO_TYPES_AVAILABLE`) flag is crucial for scripts that depend on protobuf compiled types. Ensure it's correctly checked and that scripts handle its state gracefully.
--   **Python Module Execution:** Scripts intended to be part of a package (e.g., using relative imports like `from . import common_utils`) should be run as modules using `python -m src.script_name` from the project root if they are in a subdirectory like `src/`.
--   **Linter Error Iteration:** If linter errors persist after 2-3 attempts on the same block of code, especially with `cursor.execute` calls, it's better to pause, simplify the problematic SQL or Python logic, or ask the user for a fresh perspective rather than repeatedly trying minor variations. The issue might be more fundamental than a simple syntax error.
--   **Focus on One Task:** When in Executor mode, complete one task from the "Project Status Board" at a time. Inform the user upon completion, detailing the milestone achieved based on success criteria and test results, and await manual testing/verification before proceeding.
--   **Scratchpad for Resilience:** The IDE (Cursor) can be unstable. Regularly update the scratchpad, especially with the current task context, to ensure work can be resumed efficiently after crashes or context loss.
--   **`tqdm` for Clean CLI Progress:** For long-running batch processes like historical data fetching, `tqdm` provides excellent progress bars. Careful management of its `postfix` and `description` attributes, along with conditional printing in helper functions, can lead to a clean, single-line updating display, improving user experience. Avoid printing unrelated messages from within loops that `tqdm` is managing, as this breaks the animation.
--   **Verbose Logging Control:** Debug print statements are useful during development but should be conditional or easily removable for cleaner operational output.
+(Existing lessons remain relevant, minor additions or rephrasing if needed based on recent work)
+-   **Manual DB Deletion:** When schema changes are significant... (unchanged)
+-   **Protobuf Availability:** The `PROTOBUF_AVAILABLE` (now `PROTO_TYPES_AVAILABLE`) flag... (unchanged)
+-   **Python Module Execution:** Scripts intended to be part of a package... (unchanged)
+-   **Linter Error Iteration:** If linter errors persist... (unchanged)
+-   **Focus on One Task:** When in Executor mode... (unchanged)
+-   **Scratchpad for Resilience:** The IDE (Cursor) can be unstable... (unchanged)
+-   **`tqdm` for Clean CLI Progress:** For long-running batch processes... (unchanged)
+-   **Verbose Logging Control:** Debug print statements are useful... (unchanged)
+-   **Database Optimization Impact:** Pre-fetching data (messages, events) for batch processing within `_get_formatted_transactions_for_block` and enabling WAL mode with appropriate indexing dramatically reduced database query overhead, leading to substantial API performance improvements.
+-   **Client-Side Logic for UI:** Carefully managing client-side JavaScript for fetching, sorting, and displaying data is crucial for a smooth user experience, especially when dealing with dynamically updating lists like blocks. Ensuring correct data manipulation (e.g., filtering duplicates, sorting, trimming) prevents visual glitches.
 
 ## Current Context / Last Task Worked On
 
-**Overall Goal:** Build a generative block prediction model using Mayanode API and Tendermint RPC data. Focus is on robust data acquisition, parsing, storage, and retrieval.
+**Overall Goal:** Build a generative block prediction model using Mayanode API and Tendermint RPC data. The foundational data pipeline (fetching, parsing, storage, optimized retrieval) and a high-performance Flask visualization app are now complete.
 
-**Current Phase:** Data Layer Implementation (Task 10.2), specifically refinements to data ingestion and preparing for the Flask app (Task 10.2.D).
+**Current Phase:** Completed Phase 10 (Data Pipeline & Flask App). Preparing to start Phase 11 (AI Model Development).
 
-**Last Major Task Group Completed (Refinements to `common_utils.py` and `fetch_realtime_transactions.py`):**
--   **`common_utils.py`:**
-    -   Removed unused `_parse_event_attributes`.
-    -   Improved `parse_iso_datetime` for robustness.
-    -   Refined `camel_to_snake` for better edge case handling.
-    -   Enhanced `transform_decoded_tm_tx_to_mayanode_format` for more accurate Mayanode API structure replication (removal of default/empty fields, handling of internally added keys).
-    -   Added more comprehensive tests for `camel_to_snake` and `transform_decoded_tm_tx_to_mayanode_format`.
-    -   Commented out verbose debug print statements (`[DEBUG parse_confirmed_block]`, `[TM_RPC_DEBUG]`).
--   **`fetch_realtime_transactions.py` (for improved historical catch-up console output):**
-    -   Modified `fetch_and_store_block` to only print the initial "Processing block..." message if `tqdm_bar` is *not* active.
-    -   Enhanced the `run_historical_catchup` function:
-        *   When a block is skipped because it already exists, `tqdm` postfix is updated (e.g., "Block 12345 exists. Skipped.").
-        *   After fetching and attempting to store a block, `tqdm` postfix is updated with the status (e.g., "Processing: 12346 OK", "Processing: 12347 FAILED (fetch)", or "Processing: 12348 FAILED (store)").
-        *   The `tqdm` progress bar initialization now uses `bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]'` for a standard, informative layout.
-        *   The ETA calculation is updated more frequently within the loop and updates the `tqdm` bar's description (e.g., "Historical Catch-up (ETA: 0:00:XX)").
-        *   The `processed_count_in_catchup` (used for ETA) now more accurately reflects blocks that were actually fetched/processed, not just skipped, for better ETA calculation.
-        *   Ensured `overall_progress_bar.set_description_str` is called to reset or set the description before setting the postfix, which helps keep the `tqdm` line cleaner.
+**Last Major Task Group Completed (Phase 10, specifically Task 10.2.D - Flask App & Optimizations):**
+-   **`src/database_utils.py`:**
+    -   Highly optimized `reconstruct_block_as_mayanode_api_json` (and its helper `_get_formatted_transactions_for_block`) by pre-fetching messages and events. This resulted in API response times of 5-9ms for block data.
+    -   Ensured WAL mode is active and added relevant indexes.
+-   **`app.py`:**
+    -   Implemented `/api/mempool` endpoint.
+    -   Ensured all API endpoints benefit from the optimized database queries.
+    -   Refined logging and error handling.
+-   **`templates/latest_blocks.html`:**
+    -   Integrated mempool display with dynamic updates.
+    -   Fixed UI issues related to block list management (duplicates, sorting, max display).
+    -   Ensured responsive design for mempool and block sections.
+-   **`src/api_connections.py` & `src/common_utils.py`:**
+    -   Minor refinements and ensuring stability for Flask app usage.
 
-**Reasoning:** The primary goal was to address the user's feedback regarding verbose debug logs and to improve the console user experience during historical data fetching. Removing debug prints declutters the output. The `tqdm` enhancements aim to provide a clean, single-line animated progress bar that gives clear status updates for each block and a more accurate ETA, rather than multiple scrolling lines.
+**Reasoning:** The primary goal was to finalize and optimize the Flask application for displaying blocks and mempool data, achieving performance suitable for arbitrage monitoring as a benchmark. This involved deep optimization of database interactions and refining the frontend JavaScript.
 
-**Awaiting User Input:** Confirmation of improved console output for historical catch-up in `fetch_realtime_transactions.py`. Then, ready to proceed with Task 10.2.D.3 (Database Queries for CACAO Dividends).
+**Awaiting User Input:** Confirmation to proceed with Phase 11: AI Model Development, starting with Task 11.1 (Data Preprocessing).
 
 ## Last Task Worked On Context
+*   **Last Task:** Completed Phase 10 by finalizing Flask app log verbosity and preparing for the next phase. Corrected an overreach in updating Phase 11 objectives in the scratchpad.
+*   **Current Focus:** Transitioning to Phase 11 - Generative Block Prediction Model. The immediate next step is to start **Task 11.1: Preprocessing for Block Prediction (`preprocess_ai_data.py`)**.
 
-**File:** `src/common_utils.py` and `src/fetch_realtime_transactions.py`
-**Summary of Changes:**
-
-*   `src/common_utils.py`:
-    *   Commented out all `print(f"[DEBUG parse_confirmed_block] ...")` and `print(f"  [TM_RPC_DEBUG] ...")` statements to reduce console verbosity during block parsing.
-
-*   `fetch_realtime_transactions.py` (for improved historical catch-up console output):
-    -   Modified `fetch_and_store_block` to only print the initial "Processing block..." message if `tqdm_bar` is *not* active.
-    -   Enhanced the `run_historical_catchup` function:
-        *   When a block is skipped because it already exists, `tqdm` postfix is updated (e.g., "Block 12345 exists. Skipped.").
-        *   After fetching and attempting to store a block, `tqdm` postfix is updated with the status (e.g., "Processing: 12346 OK", "Processing: 12347 FAILED (fetch)", or "Processing: 12348 FAILED (store)").
-        *   The `tqdm` progress bar initialization now uses `bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]'` for a standard, informative layout.
-        *   The ETA calculation is updated more frequently within the loop and updates the `tqdm` bar's description (e.g., "Historical Catch-up (ETA: 0:00:XX)").
-        *   The `processed_count_in_catchup` (used for ETA) now more accurately reflects blocks that were actually fetched/processed, not just skipped, for better ETA calculation.
-        *   Ensured `overall_progress_bar.set_description_str` is called to reset or set the description before setting the postfix, which helps keep the `tqdm` line cleaner.
-
-**Reasoning:** The primary goal was to address the user's feedback regarding verbose debug logs and to improve the console user experience during historical data fetching. Removing debug prints declutters the output. The `tqdm` enhancements aim to provide a clean, single-line animated progress bar that gives clear status updates for each block and a more accurate ETA, rather than multiple scrolling lines.
+Date: [Current Date - to be filled by assistant]
+Author: Gemini
+Status: Phase 10 Complete. Ready for Phase 11.

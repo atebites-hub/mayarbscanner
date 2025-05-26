@@ -59,7 +59,7 @@ try:
     MsgObservedTxIn = MsgObservedTxIn_imported # Assign to global var
     
     PROTO_TYPES_AVAILABLE = True
-    print("[common_utils.py] Successfully imported betterproto CosmosTx, Secp256k1PubKey, and specific Mayanode types (MsgNetworkFee, MsgTssKeysignFail, MsgConsolidate, MsgOutboundTx, MsgObservedTxIn).") # Updated print
+    # print("[common_utils.py] Successfully imported betterproto CosmosTx, Secp256k1PubKey, and specific Mayanode types (MsgNetworkFee, MsgTssKeysignFail, MsgConsolidate, MsgOutboundTx, MsgObservedTxIn).") # Updated print
 except ImportError as e:
     print(f"[common_utils.py] Warning: Protobuf types not fully available during import. Error: {e}. Advanced decoding might be limited.")
     # Vars remain None as initialized
@@ -173,7 +173,7 @@ def deep_decode_any_messages(current_obj, tx_level_hrp=None):
                             derived_address = derive_cosmos_address_from_pubkey_bytes(actual_pubkey_bytes_for_addr, tx_level_hrp)
                             if derived_address:
                                 current_obj["derivedAddress"] = derived_address
-                                print(f"[DEBUG deep_decode] Added derivedAddress: {derived_address} to PubKey Any for typeUrl: {type_url}")
+                                # print(f"[DEBUG deep_decode] Added derivedAddress: {derived_address} to PubKey Any for typeUrl: {type_url}")
                         except Exception: 
                             pass # nosemgrep: general-exception-pass
                 return current_obj
@@ -1261,7 +1261,7 @@ if __name__ == '__main__':
 
     for camel_key, expected_snake_key in test_cases_camel.items():
         actual_snake = camel_to_snake(camel_key)
-        print(f"'{camel_key}' -> '{actual_snake}' (Expected: '{expected_snake}') {'PASS' if actual_snake == expected_snake else 'FAIL'}")
+        print(f"'{camel_key}' -> '{actual_snake}' (Expected: '{expected_snake_key}') {'PASS' if actual_snake == expected_snake_key else 'FAIL'}")
 
     print("\n--- Testing transform_decoded_tm_tx_to_mayanode_format ---")
     sample_tm_decoded_tx = { # Simulating output from decode_cosmos_tx_string_to_dict

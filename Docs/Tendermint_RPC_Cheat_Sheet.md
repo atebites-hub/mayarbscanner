@@ -51,3 +51,4 @@ Used to submit new transactions to the network. While not for *reading* mempool 
 *   For reliable and high-throughput access, running a local MayaChain node and querying its Tendermint RPC is recommended.
 *   The default port for Tendermint RPC on MayaChain mainnet nodes is `27147`.
 *   Refer to the general Tendermint RPC documentation and MayaChain-specific resources for details on transaction structures and encoding. 
+*   NOTE FOR WEB SOCKETS: WHEN THE ENABLED THEM, THE WEBSOCKET ENDPOINT IS NOW wss://rpc-maya.liquify.com/websocket

@@ -183,3 +183,4 @@ src/.DS_Store
 bin/
 decoded_tx_sample.json
 mayanode_blocks.db
+comparison_outputs/
