@@ -19,3 +19,5 @@ virtualenv
 betterproto[compiler]==2.0.0b7
 grpclib==0.4.8
 bech32 # For converting address bytes to human-readable format 
+aiohttp 
+tqdm # For progress bars 

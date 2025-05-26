@@ -1,0 +1,3234 @@
+{
+  "block_height_str": "11320570",
+  "block_height_int": 11320570,
+  "block_hash": "C2FECAF35508DCCE7D7EB8532243D3DE658314D2F8F7128A2A3EA57703EA0218",
+  "block_time_str": "2025-05-26T01:37:41.128764381Z",
+  "block_time_dt": "2025-05-26 01:37:41.128764+00:00",
+  "chain_id": "mayachain-mainnet-v1",
+  "proposer_address": "D917E1D2893573942550EE2B1A3C0279CE343696",
+  "last_block_hash": "50DA8473EAF83F9D40049E38AB39E625C665A87844AFB5975826D7A701134F22",
+  "data_hash": "C89915953B3FE747E88A895BFB01A9B00666C8A12531E300DC566F5E44EB080A",
+  "validators_hash": "5D3C89CF3377543C775304D62E167E950A27487A14CA7BFDA949905605CC27D3",
+  "next_validators_hash": "5D3C89CF3377543C775304D62E167E950A27487A14CA7BFDA949905605CC27D3",
+  "consensus_hash": "048091BC7DDC283F77BFBF91D73C44DA58C3DF8A9CBC867405D8B7F3DAADA22F",
+  "app_hash": "F61E628611000564DA05ED9543EBB2F586537FDDE2E1261916223E602CC3D376",
+  "last_results_hash": "37CCFACB64BD60AE40E557D1C589EA1BCD1B2C636DD8EBC01BC671481A3799D8",
+  "evidence_hash": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+  "begin_block_events_raw": [],
+  "begin_block_events_parsed": [],
+  "end_block_events_raw": [
+    {
+      "type": "rewards",
+      "attributes": [
+        {
+          "key": "Ym9uZF9yZXdhcmQ=",
+          "value": "MA==",
+          "index": true
+        }
+      ]
+    }
+  ],
+  "end_block_events_parsed": [
+    {
+      "type": "rewards",
+      "attributes": {
+        "bond_reward": "0"
+      }
+    }
+  ],
+  "transactions_raw_base64": [
+    "CkEKPwoUL3R5cGVzLk1zZ05ldHdvcmtGZWUSJwj2nJEKEgRUSE9SGAEggIl6KhSIWVEghD0+LrZSsRhI73sfvvIYvxJdClMKRgofL2Nvc21vcy5jcnlwdG8uc2VjcDI1NmsxLlB1YktleRIjCiEDoF33+f4omZvU8JCuuV4Z67F+n7cXaBQm+D6l5rOLv9ESBAoCCAEY99T6AhIGEIDQrPMOGkCNDXS6x/bZCUbnYINwZP2Rkpn18Qk86c44RvnR+Jb0Ow8bzcNv0DAtoGiOPaUnI+5rAxSM3YSelDVB3o04yyir",
+    "CkEKPwoUL3R5cGVzLk1zZ05ldHdvcmtGZWUSJwj2nJEKEgRUSE9SGAEggIl6KhSPYQeJaFh/f/SQ+3Ie4z4dnRMgTRJdClMKRgofL2Nvc21vcy5jcnlwdG8uc2VjcDI1NmsxLlB1YktleRIjCiEDMV61JYGOvyBHqWvIsD3vARs6lampxc0D+F+bCAy2qZISBAoCCAEY78SPAxIGEIDQrPMOGkBJSY3rCA7cRnxPnSdstlc8uoTGae6KRceoY2QTJxzBjzwBzTEBX2YwwF2E32nZ/8LU82h/BvxO9bL6fYblB0Qi",
+    "CkEKPwoUL3R5cGVzLk1zZ05ldHdvcmtGZWUSJwj2nJEKEgRUSE9SGAEggIl6KhTOthrO6Aw6Fa7ZQYK5Tp0SvfkHJxJdClMKRgofL2Nvc21vcy5jcnlwdG8uc2VjcDI1NmsxLlB1YktleRIjCiEDn4TostDi0IV6KYxqMxXYAcB0tXZXWrqCuZ8IJpk1DegSBAoCCAEYi8PeAhIGEIDQrPMOGkCKSEbRxhdrN9VqaLo7hXfR79jxkccLy5D2txv8WQNgTAYXyB/84SaH8+OM3xGh/sZb2oUXYfe1d1+PaTw14FnR",
+    "CqkDCqYDChgvdHlwZXMuTXNnVHNzS2V5c2lnbkZhaWwSiQMKQDdhMzE2OWFjZWZlNjk5ZDk4MTcxYTgyN2ZiOGUwYTg3YmMzZTMyMDBjZGNmNDY2YzcwOWRjMjUxZGZiODc2NDQQlvmyBRp7CipzaWduZXJzIGZhaWwgdG8gc3luYyBiZWZvcmUga2V5Z2VuL2tleXNpZ24aTQpLbWF5YXB1YjFhZGR3bnBlcHFkc3Qzd2U4dDY4c2FtZzlqeHY5OHk5cjNzendmcGd5Y2czcXp2amF2d2xncnhmYzA1d2x2YzluczJzIkRPVVQ6RUY0QjI4RjJFNTFCMEYwQjgwQjMxQjVENzdDMzExQjgwRjZFRkFFNTREMjFCODIwRERDMzRGQ0ZFMTBBODAwMSoaCg8KA0FSQhIDRVRIGgNFVEgSBzIwMTI2OTkyS21heWFwdWIxYWRkd25wZXBxMG1sMGd3cmh4bXBxZmt1cGszY3M3cnJjM3AzOWphZnZ3d3J6bm1sNXNyNnl1aHdyMmh5MjRjdmNqdjoUGbhkajQrWwSoV6cxzZuqrrRMRCgSXQpTCkYKHy9jb3Ntb3MuY3J5cHRvLnNlY3AyNTZrMS5QdWJLZXkSIwohAs8TU5sTr+8PyOHLKd5XcqmSw07kQRnF5IcTv2WncnE7EgQKAggBGL6kkQMSBhCA0KzzDhpAmgrodYpdpaVPvn9i+xC+iRbxHDx0DLW8O+f493ZWGUMCrzL9dw0SYe1ucILpxUT0gcp7qa76eypngoy93ymhfw==",
+    "CqkDCqYDChgvdHlwZXMuTXNnVHNzS2V5c2lnbkZhaWwSiQMKQDdhMzE2OWFjZWZlNjk5ZDk4MTcxYTgyN2ZiOGUwYTg3YmMzZTMyMDBjZGNmNDY2YzcwOWRjMjUxZGZiODc2NDQQlvmyBRp7CipzaWduZXJzIGZhaWwgdG8gc3luYyBiZWZvcmUga2V5Z2VuL2tleXNpZ24aTQpLbWF5YXB1YjFhZGR3bnBlcHFkc3Qzd2U4dDY4c2FtZzlqeHY5OHk5cjNzendmcGd5Y2czcXp2amF2d2xncnhmYzA1d2x2YzluczJzIkRPVVQ6RUY0QjI4RjJFNTFCMEYwQjgwQjMxQjVENzdDMzExQjgwRjZFRkFFNTREMjFCODIwRERDMzRGQ0ZFMTBBODAwMSoaCg8KA0FSQhIDRVRIGgNFVEgSBzIwMTI2OTkyS21heWFwdWIxYWRkd25wZXBxMG1sMGd3cmh4bXBxZmt1cGszY3M3cnJjM3AzOWphZnZ3d3J6bm1sNXNyNnl1aHdyMmh5MjRjdmNqdjoUK6IHQBbOrF294ukLUeec5YkTDakSXQpTCkYKHy9jb3Ntb3MuY3J5cHRvLnNlY3AyNTZrMS5QdWJLZXkSIwohAsaXiYX3r0SoVEQxM0sNw6Weqgf7kT6/1D/uDXToGL8vEgQKAggBGLry3gISBhCA0KzzDhpAEXlVILEwRIV9awF1Yx/mvtoLqsIyitqM1U79d9W5Id1AymlFv5J7qOrHOpJYzFSm9Mwx0rXZzwsloNv1I8pocA==",
+    "CqkDCqYDChgvdHlwZXMuTXNnVHNzS2V5c2lnbkZhaWwSiQMKQDdhMzE2OWFjZWZlNjk5ZDk4MTcxYTgyN2ZiOGUwYTg3YmMzZTMyMDBjZGNmNDY2YzcwOWRjMjUxZGZiODc2NDQQlvmyBRp7CipzaWduZXJzIGZhaWwgdG8gc3luYyBiZWZvcmUga2V5Z2VuL2tleXNpZ24aTQpLbWF5YXB1YjFhZGR3bnBlcHFkc3Qzd2U4dDY4c2FtZzlqeHY5OHk5cjNzendmcGd5Y2czcXp2amF2d2xncnhmYzA1d2x2YzluczJzIkRPVVQ6RUY0QjI4RjJFNTFCMEYwQjgwQjMxQjVENzdDMzExQjgwRjZFRkFFNTREMjFCODIwRERDMzRGQ0ZFMTBBODAwMSoaCg8KA0FSQhIDRVRIGgNFVEgSBzIwMTI2OTkyS21heWFwdWIxYWRkd25wZXBxMG1sMGd3cmh4bXBxZmt1cGszY3M3cnJjM3AzOWphZnZ3d3J6bm1sNXNyNnl1aHdyMmh5MjRjdmNqdjoUj2EHiWhYf3/0kPtyHuM+HZ0TIE0SXQpTCkYKHy9jb3Ntb3MuY3J5cHRvLnNlY3AyNTZrMS5QdWJLZXkSIwohAzFetSWBjr8gR6lryLA97wEbOpWpqcXNA/hfmwgMtqmSEgQKAggBGPDEjwMSBhCA0KzzDhpA+CwMoThEP9dXqyB12CzAFgC1qPkQYqJIwGyG+OxZdYZZa+kKCLaUiCS6RUX44wQxZnFoWN8EwNU7nFcQJ2jF0w==",
+    "CqkDCqYDChgvdHlwZXMuTXNnVHNzS2V5c2lnbkZhaWwSiQMKQDdhMzE2OWFjZWZlNjk5ZDk4MTcxYTgyN2ZiOGUwYTg3YmMzZTMyMDBjZGNmNDY2YzcwOWRjMjUxZGZiODc2NDQQlvmyBRp7CipzaWduZXJzIGZhaWwgdG8gc3luYyBiZWZvcmUga2V5Z2VuL2tleXNpZ24aTQpLbWF5YXB1YjFhZGR3bnBlcHFkc3Qzd2U4dDY4c2FtZzlqeHY5OHk5cjNzendmcGd5Y2czcXp2amF2d2xncnhmYzA1d2x2YzluczJzIkRPVVQ6RUY0QjI4RjJFNTFCMEYwQjgwQjMxQjVENzdDMzExQjgwRjZFRkFFNTREMjFCODIwRERDMzRGQ0ZFMTBBODAwMSoaCg8KA0FSQhIDRVRIGgNFVEgSBzIwMTI2OTkyS21heWFwdWIxYWRkd25wZXBxMG1sMGd3cmh4bXBxZmt1cGszY3M3cnJjM3AzOWphZnZ3d3J6bm1sNXNyNnl1aHdyMmh5MjRjdmNqdjoUzrYazugMOhWu2UGCuU6dEr35BycSXQpTCkYKHy9jb3Ntb3MuY3J5cHRvLnNlY3AyNTZrMS5QdWJLZXkSIwohA5+E6LLQ4tCFeimMajMV2AHAdLV2V1q6grmfCCaZNQ3oEgQKAggBGIzD3gISBhCA0KzzDhpAcSxLUBvuktt9wa9oXPvizf0Wj1UajGRhxc5OEkLjfXBCaIHLtnTleVQL8BtQdNPG942rFR6jaruQU4A6TB3D2A==",
+    "CqkDCqYDChgvdHlwZXMuTXNnVHNzS2V5c2lnbkZhaWwSiQMKQDdhMzE2OWFjZWZlNjk5ZDk4MTcxYTgyN2ZiOGUwYTg3YmMzZTMyMDBjZGNmNDY2YzcwOWRjMjUxZGZiODc2NDQQlvmyBRp7CipzaWduZXJzIGZhaWwgdG8gc3luYyBiZWZvcmUga2V5Z2VuL2tleXNpZ24aTQpLbWF5YXB1YjFhZGR3bnBlcHFkc3Qzd2U4dDY4c2FtZzlqeHY5OHk5cjNzendmcGd5Y2czcXp2amF2d2xncnhmYzA1d2x2YzluczJzIkRPVVQ6RUY0QjI4RjJFNTFCMEYwQjgwQjMxQjVENzdDMzExQjgwRjZFRkFFNTREMjFCODIwRERDMzRGQ0ZFMTBBODAwMSoaCg8KA0FSQhIDRVRIGgNFVEgSBzIwMTI2OTkyS21heWFwdWIxYWRkd25wZXBxMG1sMGd3cmh4bXBxZmt1cGszY3M3cnJjM3AzOWphZnZ3d3J6bm1sNXNyNnl1aHdyMmh5MjRjdmNqdjoUpwkdEu0hGe1rMjDJQkWwDykby+QSXQpTCkYKHy9jb3Ntb3MuY3J5cHRvLnNlY3AyNTZrMS5QdWJLZXkSIwohAjuL6eqtuzXDypojinb1CiQqAu2ne/uBjyxNNVrWozkdEgQKAggBGKnm3QISBhCA0KzzDhpAyJICn5/Arq/Qe9wtd50m7/ljVTPRtaje1i9k/XsJKdhLu+v/+YFJDJkFIdMvt8cVgrp/lY1Ce4ngV5mdY15ExQ==",
+    "CqkDCqYDChgvdHlwZXMuTXNnVHNzS2V5c2lnbkZhaWwSiQMKQDdhMzE2OWFjZWZlNjk5ZDk4MTcxYTgyN2ZiOGUwYTg3YmMzZTMyMDBjZGNmNDY2YzcwOWRjMjUxZGZiODc2NDQQlvmyBRp7CipzaWduZXJzIGZhaWwgdG8gc3luYyBiZWZvcmUga2V5Z2VuL2tleXNpZ24aTQpLbWF5YXB1YjFhZGR3bnBlcHFkc3Qzd2U4dDY4c2FtZzlqeHY5OHk5cjNzendmcGd5Y2czcXp2amF2d2xncnhmYzA1d2x2YzluczJzIkRPVVQ6RUY0QjI4RjJFNTFCMEYwQjgwQjMxQjVENzdDMzExQjgwRjZFRkFFNTREMjFCODIwRERDMzRGQ0ZFMTBBODAwMSoaCg8KA0FSQhIDRVRIGgNFVEgSBzIwMTI2OTkyS21heWFwdWIxYWRkd25wZXBxMG1sMGd3cmh4bXBxZmt1cGszY3M3cnJjM3AzOWphZnZ3d3J6bm1sNXNyNnl1aHdyMmh5MjRjdmNqdjoUg0SKhNk771Xs9A2l37ltFZwIawgSXQpTCkYKHy9jb3Ntb3MuY3J5cHRvLnNlY3AyNTZrMS5QdWJLZXkSIwohAsYgaUagVewqQSSHL4Mdz4ZW315p8jIZxlOXayE4tAboEgQKAggBGL3wkgMSBhCA0KzzDhpAmuLfyKO54ZLZ8jaPLRD0nIRtekjV6b0WQkTzYzx591FNrWpu3BOdWy9/mz9RupUqmzpV9rFsc8qEeCvaGH4/eA==",
+    "CuYDCuMDChYvdHlwZXMuTXNnT2JzZXJ2ZWRUeEluEsgDCq8DCtUCCkAwRDhBRTg4QkMxMzIyNTEzOTE5Mzg5NEIzMUUyMzI5RkE5OEZDQzhFNjdFN0QwQUU0NzU5RjVCMTU0MDU5RjdFEgRUSE9SGit0aG9yMTdod3F0MzAyZTVmMnhtNGg5NW1hOHd1Z2dxa3Zmemd2c25oNXo5Iit0aG9yMWVnbnZ1cHBtMnB6eTh2NzdoZnpxZGFldG1jejMwMnNyYXlnYXRlKiMKEgoEVEhPUhIEUlVORRoEUlVORRILMTQzOTA1NjYwMzcYCDIdChIKBFRIT1ISBFJVTkUaBFJVTkUSBzIwMDAwMDA6bT06RVRIL1VTREMtMFhBMEI4Njk5MUM2MjE4QjM2QzFEMTlENEEyRTlFQjBDRTM2MDZFQjQ4Om1heWExNzY4MjB3bWpwNTM2d3RzZGR4bjR5NTJnaHAzdzIzazc0N2hhcmQ6MjkwMDY3NDI1MDEg95yRCjJLbWF5YXB1YjFhZGR3bnBlcHEwbWwwZ3dyaHhtcHFma3VwazNjczdycmMzcDM5amFmdnd3cnpubWw1c3I2eXVod3IyaHkyNGN2Y2p2QPeckQoSFINEioTZO+9V7PQNpd+5bRWcCGsIEl0KUwpGCh8vY29zbW9zLmNyeXB0by5zZWNwMjU2azEuUHViS2V5EiMKIQLGIGlGoFXsKkEkhy+DHc+GVt9eafIyGcZTl2shOLQG6BIECgIIARi+8JIDEgYQgNCs8w4aQFTxptI3eG4xngYdGKsxR6LJ2iTeubNr0xVVm8SmKyaFch0astnqv5i6Y3KuzzqPG4UXCBdJbOW+E9yv9JATjsE=",
+    "CuYDCuMDChYvdHlwZXMuTXNnT2JzZXJ2ZWRUeEluEsgDCq8DCtUCCkAwRDhBRTg4QkMxMzIyNTEzOTE5Mzg5NEIzMUUyMzI5RkE5OEZDQzhFNjdFN0QwQUU0NzU5RjVCMTU0MDU5RjdFEgRUSE9SGit0aG9yMTdod3F0MzAyZTVmMnhtNGg5NW1hOHd1Z2dxa3Zmemd2c25oNXo5Iit0aG9yMWVnbnZ1cHBtMnB6eTh2NzdoZnpxZGFldG1jejMwMnNyYXlnYXRlKiMKEgoEVEhPUhIEUlVORRoEUlVORRILMTQzOTA1NjYwMzcYCDIdChIKBFRIT1ISBFJVTkUaBFJVTkUSBzIwMDAwMDA6bT06RVRIL1VTREMtMFhBMEI4Njk5MUM2MjE4QjM2QzFEMTlENEEyRTlFQjBDRTM2MDZFQjQ4Om1heWExNzY4MjB3bWpwNTM2d3RzZGR4bjR5NTJnaHAzdzIzazc0N2hhcmQ6MjkwMDY3NDI1MDEg95yRCjJLbWF5YXB1YjFhZGR3bnBlcHEwbWwwZ3dyaHhtcHFma3VwazNjczdycmMzcDM5amFmdnd3cnpubWw1c3I2eXVod3IyaHkyNGN2Y2p2QPeckQoSFGa+vz/gtc10r+EytNooZBY1CKf1El0KUwpGCh8vY29zbW9zLmNyeXB0by5zZWNwMjU2azEuUHViS2V5EiMKIQN0OIi/wr+XP68X8v5nimTHuDXdyuZdH+tbkjragiFrHBIECgIIARjpud0CEgYQgNCs8w4aQGeQAhfQtIAtWYB2ktWKgIOPGL17BaBgYd5OW4HVSDMJYRJYsRJ0a8Gn47VuQ9GB/JKp6Ukr+f/H9mBCwrrTnug=",
+    "CqkDCqYDChgvdHlwZXMuTXNnVHNzS2V5c2lnbkZhaWwSiQMKQDdhMzE2OWFjZWZlNjk5ZDk4MTcxYTgyN2ZiOGUwYTg3YmMzZTMyMDBjZGNmNDY2YzcwOWRjMjUxZGZiODc2NDQQlvmyBRp7CipzaWduZXJzIGZhaWwgdG8gc3luYyBiZWZvcmUga2V5Z2VuL2tleXNpZ24aTQpLbWF5YXB1YjFhZGR3bnBlcHFkc3Qzd2U4dDY4c2FtZzlqeHY5OHk5cjNzendmcGd5Y2czcXp2amF2d2xncnhmYzA1d2x2YzluczJzIkRPVVQ6RUY0QjI4RjJFNTFCMEYwQjgwQjMxQjVENzdDMzExQjgwRjZFRkFFNTREMjFCODIwRERDMzRGQ0ZFMTBBODAwMSoaCg8KA0FSQhIDRVRIGgNFVEgSBzIwMTI2OTkyS21heWFwdWIxYWRkd25wZXBxMG1sMGd3cmh4bXBxZmt1cGszY3M3cnJjM3AzOWphZnZ3d3J6bm1sNXNyNnl1aHdyMmh5MjRjdmNqdjoUhfXFy3ZRYgzPPgt7WDlh0oklLFMSXQpTCkYKHy9jb3Ntb3MuY3J5cHRvLnNlY3AyNTZrMS5QdWJLZXkSIwohAuwrdsv3SBWxgU6fb3VZmDpo2FkGG/J+9FVpYJ9e7XOiEgQKAggBGOiPggMSBhCA0KzzDhpAn1mRRheJ4aZMb3S4FExtGFPQwizuYdUQM2Zp3EqyISVjoCvMKwmUWq5zIpmstPqSUf5nTH8BIbz71Rqcls8uyw==",
+    "CqkDCqYDChgvdHlwZXMuTXNnVHNzS2V5c2lnbkZhaWwSiQMKQDdhMzE2OWFjZWZlNjk5ZDk4MTcxYTgyN2ZiOGUwYTg3YmMzZTMyMDBjZGNmNDY2YzcwOWRjMjUxZGZiODc2NDQQlvmyBRp7CipzaWduZXJzIGZhaWwgdG8gc3luYyBiZWZvcmUga2V5Z2VuL2tleXNpZ24aTQpLbWF5YXB1YjFhZGR3bnBlcHFkc3Qzd2U4dDY4c2FtZzlqeHY5OHk5cjNzendmcGd5Y2czcXp2amF2d2xncnhmYzA1d2x2YzluczJzIkRPVVQ6RUY0QjI4RjJFNTFCMEYwQjgwQjMxQjVENzdDMzExQjgwRjZFRkFFNTREMjFCODIwRERDMzRGQ0ZFMTBBODAwMSoaCg8KA0FSQhIDRVRIGgNFVEgSBzIwMTI2OTkyS21heWFwdWIxYWRkd25wZXBxMG1sMGd3cmh4bXBxZmt1cGszY3M3cnJjM3AzOWphZnZ3d3J6bm1sNXNyNnl1aHdyMmh5MjRjdmNqdjoU6Uhn6qDEpnzOue/pAA+ohdYGge0SXQpTCkYKHy9jb3Ntb3MuY3J5cHRvLnNlY3AyNTZrMS5QdWJLZXkSIwohAt90nIuRLHlAyWvVXsDT9aqGV5/ky/yerKrSzOkjqlk+EgQKAggBGLqcjQMSBhCA0KzzDhpAXlpU0m6DRaEyFCiovw+aTJ11/Uk2gjepkc2ScX6dSH5KkdW2IHL9ASp6K79nDMyMCv2l4zA6tAA2wOFpqO7zpw==",
+    "CuYDCuMDChYvdHlwZXMuTXNnT2JzZXJ2ZWRUeEluEsgDCq8DCtUCCkAwRDhBRTg4QkMxMzIyNTEzOTE5Mzg5NEIzMUUyMzI5RkE5OEZDQzhFNjdFN0QwQUU0NzU5RjVCMTU0MDU5RjdFEgRUSE9SGit0aG9yMTdod3F0MzAyZTVmMnhtNGg5NW1hOHd1Z2dxa3Zmemd2c25oNXo5Iit0aG9yMWVnbnZ1cHBtMnB6eTh2NzdoZnpxZGFldG1jejMwMnNyYXlnYXRlKiMKEgoEVEhPUhIEUlVORRoEUlVORRILMTQzOTA1NjYwMzcYCDIdChIKBFRIT1ISBFJVTkUaBFJVTkUSBzIwMDAwMDA6bT06RVRIL1VTREMtMFhBMEI4Njk5MUM2MjE4QjM2QzFEMTlENEEyRTlFQjBDRTM2MDZFQjQ4Om1heWExNzY4MjB3bWpwNTM2d3RzZGR4bjR5NTJnaHAzdzIzazc0N2hhcmQ6MjkwMDY3NDI1MDEg95yRCjJLbWF5YXB1YjFhZGR3bnBlcHEwbWwwZ3dyaHhtcHFma3VwazNjczdycmMzcDM5amFmdnd3cnpubWw1c3I2eXVod3IyaHkyNGN2Y2p2QPeckQoSFJ6YuiVl91GpD6N6bkG9kxZ6BYJAEl0KUwpGCh8vY29zbW9zLmNyeXB0by5zZWNwMjU2azEuUHViS2V5EiMKIQM6XeBGa/4OGdgMIlpdHbbQmZSsQEj/ed3VTM93ClAdRhIECgIIARjZy8gBEgYQgNCs8w4aQDM5vZ65yRRFndakCTYCi7WE+EC9KGjkLGCDyQc9AWAZMfJXXuzatWFfcASAPAj08qyFP0HNvTPmOPtgCDb83Qw=",
+    "CqkDCqYDChgvdHlwZXMuTXNnVHNzS2V5c2lnbkZhaWwSiQMKQDdhMzE2OWFjZWZlNjk5ZDk4MTcxYTgyN2ZiOGUwYTg3YmMzZTMyMDBjZGNmNDY2YzcwOWRjMjUxZGZiODc2NDQQlvmyBRp7CipzaWduZXJzIGZhaWwgdG8gc3luYyBiZWZvcmUga2V5Z2VuL2tleXNpZ24aTQpLbWF5YXB1YjFhZGR3bnBlcHFkc3Qzd2U4dDY4c2FtZzlqeHY5OHk5cjNzendmcGd5Y2czcXp2amF2d2xncnhmYzA1d2x2YzluczJzIkRPVVQ6RUY0QjI4RjJFNTFCMEYwQjgwQjMxQjVENzdDMzExQjgwRjZFRkFFNTREMjFCODIwRERDMzRGQ0ZFMTBBODAwMSoaCg8KA0FSQhIDRVRIGgNFVEgSBzIwMTI2OTkyS21heWFwdWIxYWRkd25wZXBxMG1sMGd3cmh4bXBxZmt1cGszY3M3cnJjM3AzOWphZnZ3d3J6bm1sNXNyNnl1aHdyMmh5MjRjdmNqdjoU5E+FGTgfPrmYoEsb4PjyWNQPGw0SXApSCkYKHy9jb3Ntb3MuY3J5cHRvLnNlY3AyNTZrMS5QdWJLZXkSIwohArlgxaDVFGDMmj2aCUHrBtczKeaYxYqKRHW1/Ar8PskIEgQKAggBGLiVLBIGEIDQrPMOGkCE4w4P/kJ3xffoPOCPjaDhn83v60ElnDZ6BSFBHk/R8iLs36brV7QP9z7b3YnsSQdBhjnpX4ucPmBDq8JxPZ2l",
+    "CuYDCuMDChYvdHlwZXMuTXNnT2JzZXJ2ZWRUeEluEsgDCq8DCtUCCkAwRDhBRTg4QkMxMzIyNTEzOTE5Mzg5NEIzMUUyMzI5RkE5OEZDQzhFNjdFN0QwQUU0NzU5RjVCMTU0MDU5RjdFEgRUSE9SGit0aG9yMTdod3F0MzAyZTVmMnhtNGg5NW1hOHd1Z2dxa3Zmemd2c25oNXo5Iit0aG9yMWVnbnZ1cHBtMnB6eTh2NzdoZnpxZGFldG1jejMwMnNyYXlnYXRlKiMKEgoEVEhPUhIEUlVORRoEUlVORRILMTQzOTA1NjYwMzcYCDIdChIKBFRIT1ISBFJVTkUaBFJVTkUSBzIwMDAwMDA6bT06RVRIL1VTREMtMFhBMEI4Njk5MUM2MjE4QjM2QzFEMTlENEEyRTlFQjBDRTM2MDZFQjQ4Om1heWExNzY4MjB3bWpwNTM2d3RzZGR4bjR5NTJnaHAzdzIzazc0N2hhcmQ6MjkwMDY3NDI1MDEg95yRCjJLbWF5YXB1YjFhZGR3bnBlcHEwbWwwZ3dyaHhtcHFma3VwazNjczdycmMzcDM5amFmdnd3cnpubWw1c3I2eXVod3IyaHkyNGN2Y2p2QPeckQoSFI8l8+byzifz1XokmHa0jOsOXna0El0KUwpGCh8vY29zbW9zLmNyeXB0by5zZWNwMjU2azEuUHViS2V5EiMKIQNguLsnXo8O7QWRmFOQo4wE5IUEwiIBMl1jvoGZOH0d9hIECgIIARi1+scBEgYQgNCs8w4aQIYpq8/qkMIUuX8WtlY3jpDdrmVMJVY8pPjtnKXoTgLsaS0GffPN7JFBMOLQFi9aogbmBRhWu9Gj2O57eso1LSs=",
+    "CqkDCqYDChgvdHlwZXMuTXNnVHNzS2V5c2lnbkZhaWwSiQMKQDdhMzE2OWFjZWZlNjk5ZDk4MTcxYTgyN2ZiOGUwYTg3YmMzZTMyMDBjZGNmNDY2YzcwOWRjMjUxZGZiODc2NDQQlvmyBRp7CipzaWduZXJzIGZhaWwgdG8gc3luYyBiZWZvcmUga2V5Z2VuL2tleXNpZ24aTQpLbWF5YXB1YjFhZGR3bnBlcHFkc3Qzd2U4dDY4c2FtZzlqeHY5OHk5cjNzendmcGd5Y2czcXp2amF2d2xncnhmYzA1d2x2YzluczJzIkRPVVQ6RUY0QjI4RjJFNTFCMEYwQjgwQjMxQjVENzdDMzExQjgwRjZFRkFFNTREMjFCODIwRERDMzRGQ0ZFMTBBODAwMSoaCg8KA0FSQhIDRVRIGgNFVEgSBzIwMTI2OTkyS21heWFwdWIxYWRkd25wZXBxMG1sMGd3cmh4bXBxZmt1cGszY3M3cnJjM3AzOWphZnZ3d3J6bm1sNXNyNnl1aHdyMmh5MjRjdmNqdjoUjyXz5vLOJ/PVeiSYdrSM6w5edrQSXQpTCkYKHy9jb3Ntb3MuY3J5cHRvLnNlY3AyNTZrMS5QdWJLZXkSIwohA2C4uydejw7tBZGYU5CjjATkhQTCIgEyXWO+gZk4fR32EgQKAggBGLb6xwESBhCA0KzzDhpA4/5Enx0PPmovKcxXC5EC9DKQNYRbMhRF8p/9ppbMmXsQNJeIvwhIdCcbHIjP+TybDDj9LRrjBLCQB+duFIMFKQ==",
+    "CuYDCuMDChYvdHlwZXMuTXNnT2JzZXJ2ZWRUeEluEsgDCq8DCtUCCkAwRDhBRTg4QkMxMzIyNTEzOTE5Mzg5NEIzMUUyMzI5RkE5OEZDQzhFNjdFN0QwQUU0NzU5RjVCMTU0MDU5RjdFEgRUSE9SGit0aG9yMTdod3F0MzAyZTVmMnhtNGg5NW1hOHd1Z2dxa3Zmemd2c25oNXo5Iit0aG9yMWVnbnZ1cHBtMnB6eTh2NzdoZnpxZGFldG1jejMwMnNyYXlnYXRlKiMKEgoEVEhPUhIEUlVORRoEUlVORRILMTQzOTA1NjYwMzcYCDIdChIKBFRIT1ISBFJVTkUaBFJVTkUSBzIwMDAwMDA6bT06RVRIL1VTREMtMFhBMEI4Njk5MUM2MjE4QjM2QzFEMTlENEEyRTlFQjBDRTM2MDZFQjQ4Om1heWExNzY4MjB3bWpwNTM2d3RzZGR4bjR5NTJnaHAzdzIzazc0N2hhcmQ6MjkwMDY3NDI1MDEg95yRCjJLbWF5YXB1YjFhZGR3bnBlcHEwbWwwZ3dyaHhtcHFma3VwazNjczdycmMzcDM5amFmdnd3cnpubWw1c3I2eXVod3IyaHkyNGN2Y2p2QPeckQoSFIX1xct2UWIMzz4Le1g5YdKJJSxTEl0KUwpGCh8vY29zbW9zLmNyeXB0by5zZWNwMjU2azEuUHViS2V5EiMKIQLsK3bL90gVsYFOn291WZg6aNhZBhvyfvRVaWCfXu1zohIECgIIARjpj4IDEgYQgNCs8w4aQJKmILn0HlDBszz5aVWrW5l4o+76CDf787Jc9DxFZaEMQhJnMknqKi9PhObEORy2nh6gI7vouEi6WQKfdRXiVnw=",
+    "CqkDCqYDChgvdHlwZXMuTXNnVHNzS2V5c2lnbkZhaWwSiQMKQDdhMzE2OWFjZWZlNjk5ZDk4MTcxYTgyN2ZiOGUwYTg3YmMzZTMyMDBjZGNmNDY2YzcwOWRjMjUxZGZiODc2NDQQlvmyBRp7CipzaWduZXJzIGZhaWwgdG8gc3luYyBiZWZvcmUga2V5Z2VuL2tleXNpZ24aTQpLbWF5YXB1YjFhZGR3bnBlcHFkc3Qzd2U4dDY4c2FtZzlqeHY5OHk5cjNzendmcGd5Y2czcXp2amF2d2xncnhmYzA1d2x2YzluczJzIkRPVVQ6RUY0QjI4RjJFNTFCMEYwQjgwQjMxQjVENzdDMzExQjgwRjZFRkFFNTREMjFCODIwRERDMzRGQ0ZFMTBBODAwMSoaCg8KA0FSQhIDRVRIGgNFVEgSBzIwMTI2OTkyS21heWFwdWIxYWRkd25wZXBxMG1sMGd3cmh4bXBxZmt1cGszY3M3cnJjM3AzOWphZnZ3d3J6bm1sNXNyNnl1aHdyMmh5MjRjdmNqdjoUCNXNvljfzq86jbejhp0CYA+ns8wSXApSCkYKHy9jb3Ntb3MuY3J5cHRvLnNlY3AyNTZrMS5QdWJLZXkSIwohA6WC/k3TZlCEigwnMWuck4ozmUWlxWCY7aybvQAPOaMMEgQKAggBGLPgNRIGEIDQrPMOGkBOLSHiafLb0YFzcnZyYH8VkRKBdeJe6TUWV0RcXbxA0Ej6NNhwu4lFS+9jK1HAkx6v4ItnC+RxEXkdfTCMOJDe",
+    "CuYDCuMDChYvdHlwZXMuTXNnT2JzZXJ2ZWRUeEluEsgDCq8DCtUCCkAwRDhBRTg4QkMxMzIyNTEzOTE5Mzg5NEIzMUUyMzI5RkE5OEZDQzhFNjdFN0QwQUU0NzU5RjVCMTU0MDU5RjdFEgRUSE9SGit0aG9yMTdod3F0MzAyZTVmMnhtNGg5NW1hOHd1Z2dxa3Zmemd2c25oNXo5Iit0aG9yMWVnbnZ1cHBtMnB6eTh2NzdoZnpxZGFldG1jejMwMnNyYXlnYXRlKiMKEgoEVEhPUhIEUlVORRoEUlVORRILMTQzOTA1NjYwMzcYCDIdChIKBFRIT1ISBFJVTkUaBFJVTkUSBzIwMDAwMDA6bT06RVRIL1VTREMtMFhBMEI4Njk5MUM2MjE4QjM2QzFEMTlENEEyRTlFQjBDRTM2MDZFQjQ4Om1heWExNzY4MjB3bWpwNTM2d3RzZGR4bjR5NTJnaHAzdzIzazc0N2hhcmQ6MjkwMDY3NDI1MDEg95yRCjJLbWF5YXB1YjFhZGR3bnBlcHEwbWwwZ3dyaHhtcHFma3VwazNjczdycmMzcDM5amFmdnd3cnpubWw1c3I2eXVod3IyaHkyNGN2Y2p2QPeckQoSFBm4ZGo0K1sEqFenMc2bqq60TEQoEl0KUwpGCh8vY29zbW9zLmNyeXB0by5zZWNwMjU2azEuUHViS2V5EiMKIQLPE1ObE6/vD8jhyyneV3KpksNO5EEZxeSHE79lp3JxOxIECgIIARi/pJEDEgYQgNCs8w4aQPioxPmRnuBdS2O0Wwv+bcdgWixTOHKyO+xp8CAXkBg7XUemU2kMD2+gjt4S/efxFZwwvu204NUbTT184ptqHBo=",
+    "CqkDCqYDChgvdHlwZXMuTXNnVHNzS2V5c2lnbkZhaWwSiQMKQDdhMzE2OWFjZWZlNjk5ZDk4MTcxYTgyN2ZiOGUwYTg3YmMzZTMyMDBjZGNmNDY2YzcwOWRjMjUxZGZiODc2NDQQlvmyBRp7CipzaWduZXJzIGZhaWwgdG8gc3luYyBiZWZvcmUga2V5Z2VuL2tleXNpZ24aTQpLbWF5YXB1YjFhZGR3bnBlcHFkc3Qzd2U4dDY4c2FtZzlqeHY5OHk5cjNzendmcGd5Y2czcXp2amF2d2xncnhmYzA1d2x2YzluczJzIkRPVVQ6RUY0QjI4RjJFNTFCMEYwQjgwQjMxQjVENzdDMzExQjgwRjZFRkFFNTREMjFCODIwRERDMzRGQ0ZFMTBBODAwMSoaCg8KA0FSQhIDRVRIGgNFVEgSBzIwMTI2OTkyS21heWFwdWIxYWRkd25wZXBxMG1sMGd3cmh4bXBxZmt1cGszY3M3cnJjM3AzOWphZnZ3d3J6bm1sNXNyNnl1aHdyMmh5MjRjdmNqdjoU9U49r+RQ+yj2yNa/h0iIYQ8yYZESXApSCkYKHy9jb3Ntb3MuY3J5cHRvLnNlY3AyNTZrMS5QdWJLZXkSIwohA8EGzVUAfbWToYPfTlZvwDPQ13etSX2GBVLCWfiQflPkEgQKAggBGOniNRIGEIDQrPMOGkAQrSUunQsdsQZn7E2I2ewNY5/LObSr/E7m6JcPj+XBzTCgfrhFuLTA3Y8yARdmtZDQ4dHxofLrmnaUAqNIGQxP",
+    "CqkDCqYDChgvdHlwZXMuTXNnVHNzS2V5c2lnbkZhaWwSiQMKQDdhMzE2OWFjZWZlNjk5ZDk4MTcxYTgyN2ZiOGUwYTg3YmMzZTMyMDBjZGNmNDY2YzcwOWRjMjUxZGZiODc2NDQQlvmyBRp7CipzaWduZXJzIGZhaWwgdG8gc3luYyBiZWZvcmUga2V5Z2VuL2tleXNpZ24aTQpLbWF5YXB1YjFhZGR3bnBlcHFkc3Qzd2U4dDY4c2FtZzlqeHY5OHk5cjNzendmcGd5Y2czcXp2amF2d2xncnhmYzA1d2x2YzluczJzIkRPVVQ6RUY0QjI4RjJFNTFCMEYwQjgwQjMxQjVENzdDMzExQjgwRjZFRkFFNTREMjFCODIwRERDMzRGQ0ZFMTBBODAwMSoaCg8KA0FSQhIDRVRIGgNFVEgSBzIwMTI2OTkyS21heWFwdWIxYWRkd25wZXBxMG1sMGd3cmh4bXBxZmt1cGszY3M3cnJjM3AzOWphZnZ3d3J6bm1sNXNyNnl1aHdyMmh5MjRjdmNqdjoU2X6k8yJCQ90wi1G0qQeS0TTSXcASXQpTCkYKHy9jb3Ntb3MuY3J5cHRvLnNlY3AyNTZrMS5QdWJLZXkSIwohAkIIGjlNC3Qhsmb4+DDNWiHwhiD40754FvZAm2ahy8P5EgQKAggBGN/QgQMSBhCA0KzzDhpAkuvV4YZYV9GBYkVLoWvZo5RaaIOXQ4RsnA71LDcIYYoucq6pyldWGzD9PH2O6hROk2fNDNsZ42qxez4PSP8TIA=="
+  ],
+  "transactions_source": "tendermint_rpc_b64_txs_with_results",
+  "transactions": [
+    {
+      "hash": "574E781BBDF8EF889E6873F575C0542D9046BB48A3056CEBFCF30B440982B66A",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "block_height": "21253750",
+              "chain": "THOR",
+              "transaction_size": "1",
+              "transaction_fee_rate": "2000000",
+              "signer": "maya13pv4zgyy85lzadjjkyvy3mmmr7l0yx9lzamay4",
+              "@type": "/types.MsgNetworkFee"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "A6Bd9/n+KJmb1PCQrrleGeuxfp+3F2gUJvg+peazi7/R",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "6204023"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "jQ10usf22QlG52CDcGT9kZKZ9fEJPOnOOEb50fiW9DsPG83Db9AwLaBojj2lJyPuawMUjN2EnpQ1Qd6NOMsoqw=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_network_fee\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "640791",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTEzcHY0emd5eTg1bHphZGpqa3l2eTNtbW1yN2wweXg5bHphbWF5NA==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTEzcHY0emd5eTg1bHphZGpqa3l2eTNtbW1yN2wweXg5bHphbWF5NC82MjA0MDIz",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "alExMHVzZjIyUWxHNTJDRGNHVDlrWktaOWZFSlBPbk9PRWI1MGZpVzlEc1BHODNEYjlBd0xhQm9qajJsSnlQdWF3TVVqTjJFbnBRMVFkNk5PTXNvcXc9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X25ldHdvcmtfZmVl",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya13pv4zgyy85lzadjjkyvy3mmmr7l0yx9lzamay4"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya13pv4zgyy85lzadjjkyvy3mmmr7l0yx9lzamay4/6204023"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "jQ10usf22QlG52CDcGT9kZKZ9fEJPOnOOEb50fiW9DsPG83Db9AwLaBojj2lJyPuawMUjN2EnpQ1Qd6NOMsoqw=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_network_fee"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "FFB01F576E991D58E67CC6CCF7D2A43F6A956E9FF95332913E3B7AF2CBBE3A72",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "block_height": "21253750",
+              "chain": "THOR",
+              "transaction_size": "1",
+              "transaction_fee_rate": "2000000",
+              "signer": "maya13ass0ztgtplhlaysldepace7rkw3xgzd5gm4sk",
+              "@type": "/types.MsgNetworkFee"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "AzFetSWBjr8gR6lryLA97wEbOpWpqcXNA/hfmwgMtqmS",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "6546031"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "SUmN6wgO3EZ8T50nbLZXPLqExmnuikXHqGNkEyccwY88Ac0xAV9mMMBdhN9p2f/C1PNofwb8TvWy+n2G5QdEIg=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_network_fee\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "643428",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTEzYXNzMHp0Z3RwbGhsYXlzbGRlcGFjZTdya3czeGd6ZDVnbTRzaw==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTEzYXNzMHp0Z3RwbGhsYXlzbGRlcGFjZTdya3czeGd6ZDVnbTRzay82NTQ2MDMx",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "U1VtTjZ3Z08zRVo4VDUwbmJMWlhQTHFFeG1udWlrWEhxR05rRXljY3dZODhBYzB4QVY5bU1NQmRoTjlwMmYvQzFQTm9md2I4VHZXeStuMkc1UWRFSWc9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X25ldHdvcmtfZmVl",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya13ass0ztgtplhlaysldepace7rkw3xgzd5gm4sk"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya13ass0ztgtplhlaysldepace7rkw3xgzd5gm4sk/6546031"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "SUmN6wgO3EZ8T50nbLZXPLqExmnuikXHqGNkEyccwY88Ac0xAV9mMMBdhN9p2f/C1PNofwb8TvWy+n2G5QdEIg=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_network_fee"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "D4E8C577BB7FEC583A29C7E2191464A04101FEF67A0359C28108099617D033C9",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "block_height": "21253750",
+              "chain": "THOR",
+              "transaction_size": "1",
+              "transaction_fee_rate": "2000000",
+              "signer": "maya1e6mp4nhgpsapttkegxptjn5az27ljpe80q6h2k",
+              "@type": "/types.MsgNetworkFee"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "A5+E6LLQ4tCFeimMajMV2AHAdLV2V1q6grmfCCaZNQ3o",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "5742987"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "ikhG0cYXazfVami6O4V30e/Y8ZHHC8uQ9rcb/FkDYEwGF8gf/OEmh/PjjN8Rof7GW9qFF2H3tXdfj2k8NeBZ0Q=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_network_fee\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "644226",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTFlNm1wNG5oZ3BzYXB0dGtlZ3hwdGpuNWF6MjdsanBlODBxNmgyaw==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTFlNm1wNG5oZ3BzYXB0dGtlZ3hwdGpuNWF6MjdsanBlODBxNmgyay81NzQyOTg3",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "aWtoRzBjWVhhemZWYW1pNk80VjMwZS9ZOFpISEM4dVE5cmNiL0ZrRFlFd0dGOGdmL09FbWgvUGpqTjhSb2Y3R1c5cUZGMkgzdFhkZmoyazhOZUJaMFE9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X25ldHdvcmtfZmVl",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya1e6mp4nhgpsapttkegxptjn5az27ljpe80q6h2k"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya1e6mp4nhgpsapttkegxptjn5az27ljpe80q6h2k/5742987"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "ikhG0cYXazfVami6O4V30e/Y8ZHHC8uQ9rcb/FkDYEwGF8gf/OEmh/PjjN8Rof7GW9qFF2H3tXdfj2k8NeBZ0Q=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_network_fee"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "78634D05CFB01DEB7D1503AD6B607F9CD41ACD2F5D166DB06F5E6B70B62FED4C",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "id": "7a3169acefe699d98171a827fb8e0a87bc3e3200cdcf466c709dc251dfb87644",
+              "height": "11320470",
+              "blame": {
+                "fail_reason": "signers fail to sync before keygen/keysign",
+                "is_unicast": false,
+                "blame_nodes": [
+                  {
+                    "pubkey": "mayapub1addwnpepqdst3we8t68samg9jxv98y9r3szwfpgycg3qzvjavwlgrxfc05wlvc9ns2s",
+                    "blame_data": null,
+                    "blame_signature": null
+                  }
+                ],
+                "round": ""
+              },
+              "memo": "OUT:EF4B28F2E51B0F0B80B31B5D77C311B80F6EFAE54D21B820DDC34FCFE10A8001",
+              "coins": [
+                {
+                  "asset": "ARB.ETH",
+                  "amount": "2012699",
+                  "decimals": "0"
+                }
+              ],
+              "pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+              "signer": "maya1rxuxg6359ddsf2zh5ucumxa2466yc3pgaqvss8",
+              "@type": "/types.MsgTssKeysignFail"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "As8TU5sTr+8PyOHLKd5XcqmSw07kQRnF5IcTv2WncnE7",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "6574654"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "mgrodYpdpaVPvn9i+xC+iRbxHDx0DLW8O+f493ZWGUMCrzL9dw0SYe1ucILpxUT0gcp7qa76eypngoy93ymhfw=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_tss_keysign_fail\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "1001236",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTFyeHV4ZzYzNTlkZHNmMnpoNXVjdW14YTI0NjZ5YzNwZ2FxdnNzOA==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTFyeHV4ZzYzNTlkZHNmMnpoNXVjdW14YTI0NjZ5YzNwZ2FxdnNzOC82NTc0NjU0",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "bWdyb2RZcGRwYVZQdm45aSt4QytpUmJ4SER4MERMVzhPK2Y0OTNaV0dVTUNyekw5ZHcwU1llMXVjSUxweFVUMGdjcDdxYTc2ZXlwbmdveTkzeW1oZnc9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X3Rzc19rZXlzaWduX2ZhaWw=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya1rxuxg6359ddsf2zh5ucumxa2466yc3pgaqvss8"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya1rxuxg6359ddsf2zh5ucumxa2466yc3pgaqvss8/6574654"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "mgrodYpdpaVPvn9i+xC+iRbxHDx0DLW8O+f493ZWGUMCrzL9dw0SYe1ucILpxUT0gcp7qa76eypngoy93ymhfw=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_tss_keysign_fail"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "324762ACAD64359B0B30F0C1D587298394BF0E888BB152507EC7F075A21E4DF8",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "id": "7a3169acefe699d98171a827fb8e0a87bc3e3200cdcf466c709dc251dfb87644",
+              "height": "11320470",
+              "blame": {
+                "fail_reason": "signers fail to sync before keygen/keysign",
+                "is_unicast": false,
+                "blame_nodes": [
+                  {
+                    "pubkey": "mayapub1addwnpepqdst3we8t68samg9jxv98y9r3szwfpgycg3qzvjavwlgrxfc05wlvc9ns2s",
+                    "blame_data": null,
+                    "blame_signature": null
+                  }
+                ],
+                "round": ""
+              },
+              "memo": "OUT:EF4B28F2E51B0F0B80B31B5D77C311B80F6EFAE54D21B820DDC34FCFE10A8001",
+              "coins": [
+                {
+                  "asset": "ARB.ETH",
+                  "amount": "2012699",
+                  "decimals": "0"
+                }
+              ],
+              "pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+              "signer": "maya19w3qwsqke6k9m00zay94reuuuky3xrdf93n0d3",
+              "@type": "/types.MsgTssKeysignFail"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "AsaXiYX3r0SoVEQxM0sNw6Weqgf7kT6/1D/uDXToGL8v",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "5749050"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "EXlVILEwRIV9awF1Yx/mvtoLqsIyitqM1U79d9W5Id1AymlFv5J7qOrHOpJYzFSm9Mwx0rXZzwsloNv1I8pocA=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_tss_keysign_fail\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "1002721",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTE5dzNxd3Nxa2U2azltMDB6YXk5NHJldXV1a3kzeHJkZjkzbjBkMw==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTE5dzNxd3Nxa2U2azltMDB6YXk5NHJldXV1a3kzeHJkZjkzbjBkMy81NzQ5MDUw",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "RVhsVklMRXdSSVY5YXdGMVl4L212dG9McXNJeWl0cU0xVTc5ZDlXNUlkMUF5bWxGdjVKN3FPckhPcEpZekZTbTlNd3gwclhaendzbG9OdjFJOHBvY0E9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X3Rzc19rZXlzaWduX2ZhaWw=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya19w3qwsqke6k9m00zay94reuuuky3xrdf93n0d3"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya19w3qwsqke6k9m00zay94reuuuky3xrdf93n0d3/5749050"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "EXlVILEwRIV9awF1Yx/mvtoLqsIyitqM1U79d9W5Id1AymlFv5J7qOrHOpJYzFSm9Mwx0rXZzwsloNv1I8pocA=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_tss_keysign_fail"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "62BD365775CB5E27D9C460561CE533C062B332802AD35D0025648B65D8FE2B3B",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "id": "7a3169acefe699d98171a827fb8e0a87bc3e3200cdcf466c709dc251dfb87644",
+              "height": "11320470",
+              "blame": {
+                "fail_reason": "signers fail to sync before keygen/keysign",
+                "is_unicast": false,
+                "blame_nodes": [
+                  {
+                    "pubkey": "mayapub1addwnpepqdst3we8t68samg9jxv98y9r3szwfpgycg3qzvjavwlgrxfc05wlvc9ns2s",
+                    "blame_data": null,
+                    "blame_signature": null
+                  }
+                ],
+                "round": ""
+              },
+              "memo": "OUT:EF4B28F2E51B0F0B80B31B5D77C311B80F6EFAE54D21B820DDC34FCFE10A8001",
+              "coins": [
+                {
+                  "asset": "ARB.ETH",
+                  "amount": "2012699",
+                  "decimals": "0"
+                }
+              ],
+              "pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+              "signer": "maya13ass0ztgtplhlaysldepace7rkw3xgzd5gm4sk",
+              "@type": "/types.MsgTssKeysignFail"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "AzFetSWBjr8gR6lryLA97wEbOpWpqcXNA/hfmwgMtqmS",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "6546032"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "+CwMoThEP9dXqyB12CzAFgC1qPkQYqJIwGyG+OxZdYZZa+kKCLaUiCS6RUX44wQxZnFoWN8EwNU7nFcQJ2jF0w=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_tss_keysign_fail\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "1004200",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTEzYXNzMHp0Z3RwbGhsYXlzbGRlcGFjZTdya3czeGd6ZDVnbTRzaw==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTEzYXNzMHp0Z3RwbGhsYXlzbGRlcGFjZTdya3czeGd6ZDVnbTRzay82NTQ2MDMy",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "K0N3TW9UaEVQOWRYcXlCMTJDekFGZ0MxcVBrUVlxSkl3R3lHK094WmRZWlphK2tLQ0xhVWlDUzZSVVg0NHdReFpuRm9XTjhFd05VN25GY1FKMmpGMHc9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X3Rzc19rZXlzaWduX2ZhaWw=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya13ass0ztgtplhlaysldepace7rkw3xgzd5gm4sk"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya13ass0ztgtplhlaysldepace7rkw3xgzd5gm4sk/6546032"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "+CwMoThEP9dXqyB12CzAFgC1qPkQYqJIwGyG+OxZdYZZa+kKCLaUiCS6RUX44wQxZnFoWN8EwNU7nFcQJ2jF0w=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_tss_keysign_fail"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "244BBC8149E7833FB3A95971C9F7312755ADB6B7119DFEEA25963A02E3B22212",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "id": "7a3169acefe699d98171a827fb8e0a87bc3e3200cdcf466c709dc251dfb87644",
+              "height": "11320470",
+              "blame": {
+                "fail_reason": "signers fail to sync before keygen/keysign",
+                "is_unicast": false,
+                "blame_nodes": [
+                  {
+                    "pubkey": "mayapub1addwnpepqdst3we8t68samg9jxv98y9r3szwfpgycg3qzvjavwlgrxfc05wlvc9ns2s",
+                    "blame_data": null,
+                    "blame_signature": null
+                  }
+                ],
+                "round": ""
+              },
+              "memo": "OUT:EF4B28F2E51B0F0B80B31B5D77C311B80F6EFAE54D21B820DDC34FCFE10A8001",
+              "coins": [
+                {
+                  "asset": "ARB.ETH",
+                  "amount": "2012699",
+                  "decimals": "0"
+                }
+              ],
+              "pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+              "signer": "maya1e6mp4nhgpsapttkegxptjn5az27ljpe80q6h2k",
+              "@type": "/types.MsgTssKeysignFail"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "A5+E6LLQ4tCFeimMajMV2AHAdLV2V1q6grmfCCaZNQ3o",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "5742988"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "cSxLUBvuktt9wa9oXPvizf0Wj1UajGRhxc5OEkLjfXBCaIHLtnTleVQL8BtQdNPG942rFR6jaruQU4A6TB3D2A=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_tss_keysign_fail\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "1004998",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTFlNm1wNG5oZ3BzYXB0dGtlZ3hwdGpuNWF6MjdsanBlODBxNmgyaw==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTFlNm1wNG5oZ3BzYXB0dGtlZ3hwdGpuNWF6MjdsanBlODBxNmgyay81NzQyOTg4",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "Y1N4TFVCdnVrdHQ5d2E5b1hQdml6ZjBXajFVYWpHUmh4YzVPRWtMamZYQkNhSUhMdG5UbGVWUUw4QnRRZE5QRzk0MnJGUjZqYXJ1UVU0QTZUQjNEMkE9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X3Rzc19rZXlzaWduX2ZhaWw=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya1e6mp4nhgpsapttkegxptjn5az27ljpe80q6h2k"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya1e6mp4nhgpsapttkegxptjn5az27ljpe80q6h2k/5742988"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "cSxLUBvuktt9wa9oXPvizf0Wj1UajGRhxc5OEkLjfXBCaIHLtnTleVQL8BtQdNPG942rFR6jaruQU4A6TB3D2A=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_tss_keysign_fail"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "5296226B2718CF6499357E08D84D91558E8FD468076CC3631BF1F255751FA097",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "id": "7a3169acefe699d98171a827fb8e0a87bc3e3200cdcf466c709dc251dfb87644",
+              "height": "11320470",
+              "blame": {
+                "fail_reason": "signers fail to sync before keygen/keysign",
+                "is_unicast": false,
+                "blame_nodes": [
+                  {
+                    "pubkey": "mayapub1addwnpepqdst3we8t68samg9jxv98y9r3szwfpgycg3qzvjavwlgrxfc05wlvc9ns2s",
+                    "blame_data": null,
+                    "blame_signature": null
+                  }
+                ],
+                "round": ""
+              },
+              "memo": "OUT:EF4B28F2E51B0F0B80B31B5D77C311B80F6EFAE54D21B820DDC34FCFE10A8001",
+              "coins": [
+                {
+                  "asset": "ARB.ETH",
+                  "amount": "2012699",
+                  "decimals": "0"
+                }
+              ],
+              "pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+              "signer": "maya15uy36yhdyyv766ejxry5y3dspu53hjlylvst6m",
+              "@type": "/types.MsgTssKeysignFail"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "AjuL6eqtuzXDypojinb1CiQqAu2ne/uBjyxNNVrWozkd",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "5731113"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "yJICn5/Arq/Qe9wtd50m7/ljVTPRtaje1i9k/XsJKdhLu+v/+YFJDJkFIdMvt8cVgrp/lY1Ce4ngV5mdY15ExQ=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_tss_keysign_fail\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "1007413",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTE1dXkzNnloZHl5djc2NmVqeHJ5NXkzZHNwdTUzaGpseWx2c3Q2bQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTE1dXkzNnloZHl5djc2NmVqeHJ5NXkzZHNwdTUzaGpseWx2c3Q2bS81NzMxMTEz",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "eUpJQ241L0FycS9RZTl3dGQ1MG03L2xqVlRQUnRhamUxaTlrL1hzSktkaEx1K3YvK1lGSkRKa0ZJZE12dDhjVmdycC9sWTFDZTRuZ1Y1bWRZMTVFeFE9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X3Rzc19rZXlzaWduX2ZhaWw=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya15uy36yhdyyv766ejxry5y3dspu53hjlylvst6m"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya15uy36yhdyyv766ejxry5y3dspu53hjlylvst6m/5731113"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "yJICn5/Arq/Qe9wtd50m7/ljVTPRtaje1i9k/XsJKdhLu+v/+YFJDJkFIdMvt8cVgrp/lY1Ce4ngV5mdY15ExQ=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_tss_keysign_fail"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "C09A291D8A351B9B2DD2AC5AB1A65C1161FC16A4620CFFB6A3EE6A250BE08248",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "id": "7a3169acefe699d98171a827fb8e0a87bc3e3200cdcf466c709dc251dfb87644",
+              "height": "11320470",
+              "blame": {
+                "fail_reason": "signers fail to sync before keygen/keysign",
+                "is_unicast": false,
+                "blame_nodes": [
+                  {
+                    "pubkey": "mayapub1addwnpepqdst3we8t68samg9jxv98y9r3szwfpgycg3qzvjavwlgrxfc05wlvc9ns2s",
+                    "blame_data": null,
+                    "blame_signature": null
+                  }
+                ],
+                "round": ""
+              },
+              "memo": "OUT:EF4B28F2E51B0F0B80B31B5D77C311B80F6EFAE54D21B820DDC34FCFE10A8001",
+              "coins": [
+                {
+                  "asset": "ARB.ETH",
+                  "amount": "2012699",
+                  "decimals": "0"
+                }
+              ],
+              "pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+              "signer": "maya1sdzg4pxe80h4tm85pkjalwtdzkwqs6cgc8pk75",
+              "@type": "/types.MsgTssKeysignFail"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "AsYgaUagVewqQSSHL4Mdz4ZW315p8jIZxlOXayE4tAbo",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "6600765"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "muLfyKO54ZLZ8jaPLRD0nIRtekjV6b0WQkTzYzx591FNrWpu3BOdWy9/mz9RupUqmzpV9rFsc8qEeCvaGH4/eA=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_tss_keysign_fail\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "1010284",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTFzZHpnNHB4ZTgwaDR0bTg1cGtqYWx3dGR6a3dxczZjZ2M4cGs3NQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTFzZHpnNHB4ZTgwaDR0bTg1cGtqYWx3dGR6a3dxczZjZ2M4cGs3NS82NjAwNzY1",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "bXVMZnlLTzU0WkxaOGphUExSRDBuSVJ0ZWtqVjZiMFdRa1R6WXp4NTkxRk5yV3B1M0JPZFd5OS9tejlSdXBVcW16cFY5ckZzYzhxRWVDdmFHSDQvZUE9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X3Rzc19rZXlzaWduX2ZhaWw=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya1sdzg4pxe80h4tm85pkjalwtdzkwqs6cgc8pk75"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya1sdzg4pxe80h4tm85pkjalwtdzkwqs6cgc8pk75/6600765"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "muLfyKO54ZLZ8jaPLRD0nIRtekjV6b0WQkTzYzx591FNrWpu3BOdWy9/mz9RupUqmzpV9rFsc8qEeCvaGH4/eA=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_tss_keysign_fail"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "3E8096F16217B85E0D0CAE23EE7A0FE0E7B855051F751B01164C176CCE7C1B89",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "txs": [
+                {
+                  "tx": {
+                    "id": "0D8AE88BC13225139193894B31E2329FA98FCC8E67E7D0AE4759F5B154059F7E",
+                    "chain": "THOR",
+                    "from_address": "thor17hwqt302e5f2xm4h95ma8wuggqkvfzgvsnh5z9",
+                    "to_address": "thor1egnvuppm2pzy8v77hfzqdaetmcz302sraygate",
+                    "coins": [
+                      {
+                        "asset": "THOR.RUNE",
+                        "amount": "14390566037",
+                        "decimals": "8"
+                      }
+                    ],
+                    "gas": [
+                      {
+                        "asset": "THOR.RUNE",
+                        "amount": "2000000",
+                        "decimals": "0"
+                      }
+                    ],
+                    "memo": "=:ETH/USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48:maya176820wmjp536wtsddxn4y52ghp3w23k747hard:29006742501"
+                  },
+                  "status": "incomplete",
+                  "out_hashes": [],
+                  "block_height": "21253751",
+                  "signers": [],
+                  "observed_pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+                  "keysign_ms": "0",
+                  "finalise_height": "21253751",
+                  "aggregator": "",
+                  "aggregator_target": "",
+                  "aggregator_target_limit": null
+                }
+              ],
+              "signer": "maya1sdzg4pxe80h4tm85pkjalwtdzkwqs6cgc8pk75",
+              "@type": "/types.MsgObservedTxIn"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "AsYgaUagVewqQSSHL4Mdz4ZW315p8jIZxlOXayE4tAbo",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "6600766"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "VPGm0jd4bjGeBh0YqzFHosnaJN65s2vTFVWbxKYrJoVyHRqy2eq/mLpjcq7POo8bhRcIF0ls5b4T3K/0kBOOwQ=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_observed_txin\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "623930",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTFzZHpnNHB4ZTgwaDR0bTg1cGtqYWx3dGR6a3dxczZjZ2M4cGs3NQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTFzZHpnNHB4ZTgwaDR0bTg1cGtqYWx3dGR6a3dxczZjZ2M4cGs3NS82NjAwNzY2",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "VlBHbTBqZDRiakdlQmgwWXF6Rkhvc25hSk42NXMydlRGVldieEtZckpvVnlIUnF5MmVxL21McGpjcTdQT284YmhSY0lGMGxzNWI0VDNLLzBrQk9Pd1E9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X29ic2VydmVkX3R4aW4=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya1sdzg4pxe80h4tm85pkjalwtdzkwqs6cgc8pk75"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya1sdzg4pxe80h4tm85pkjalwtdzkwqs6cgc8pk75/6600766"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "VPGm0jd4bjGeBh0YqzFHosnaJN65s2vTFVWbxKYrJoVyHRqy2eq/mLpjcq7POo8bhRcIF0ls5b4T3K/0kBOOwQ=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_observed_txin"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "763CE0DBDEDDD5912CA52234F05DDA45BEC7838E50F88E076FAA3AEFD54CB9D2",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "txs": [
+                {
+                  "tx": {
+                    "id": "0D8AE88BC13225139193894B31E2329FA98FCC8E67E7D0AE4759F5B154059F7E",
+                    "chain": "THOR",
+                    "from_address": "thor17hwqt302e5f2xm4h95ma8wuggqkvfzgvsnh5z9",
+                    "to_address": "thor1egnvuppm2pzy8v77hfzqdaetmcz302sraygate",
+                    "coins": [
+                      {
+                        "asset": "THOR.RUNE",
+                        "amount": "14390566037",
+                        "decimals": "8"
+                      }
+                    ],
+                    "gas": [
+                      {
+                        "asset": "THOR.RUNE",
+                        "amount": "2000000",
+                        "decimals": "0"
+                      }
+                    ],
+                    "memo": "=:ETH/USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48:maya176820wmjp536wtsddxn4y52ghp3w23k747hard:29006742501"
+                  },
+                  "status": "incomplete",
+                  "out_hashes": [],
+                  "block_height": "21253751",
+                  "signers": [],
+                  "observed_pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+                  "keysign_ms": "0",
+                  "finalise_height": "21253751",
+                  "aggregator": "",
+                  "aggregator_target": "",
+                  "aggregator_target_limit": null
+                }
+              ],
+              "signer": "maya1v6lt70lqkhxhftlpx26d52ryzc6s3fl4adyzuv",
+              "@type": "/types.MsgObservedTxIn"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "A3Q4iL/Cv5c/rxfy/meKZMe4Nd3K5l0f61uSOtqCIWsc",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "5725417"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "Z5ACF9C0gC1ZgHaS1YqAg48YvXsFoGBh3k5bgdVIMwlhElixEnRrwafjtW5D0YH8kqnpSSv5/8f2YELCutOe6A=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_observed_txin\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "626319",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTF2Nmx0NzBscWtoeGhmdGxweDI2ZDUycnl6YzZzM2ZsNGFkeXp1dg==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTF2Nmx0NzBscWtoeGhmdGxweDI2ZDUycnl6YzZzM2ZsNGFkeXp1di81NzI1NDE3",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "WjVBQ0Y5QzBnQzFaZ0hhUzFZcUFnNDhZdlhzRm9HQmgzazViZ2RWSU13bGhFbGl4RW5ScndhZmp0VzVEMFlIOGtxbnBTU3Y1LzhmMllFTEN1dE9lNkE9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X29ic2VydmVkX3R4aW4=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya1v6lt70lqkhxhftlpx26d52ryzc6s3fl4adyzuv"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya1v6lt70lqkhxhftlpx26d52ryzc6s3fl4adyzuv/5725417"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "Z5ACF9C0gC1ZgHaS1YqAg48YvXsFoGBh3k5bgdVIMwlhElixEnRrwafjtW5D0YH8kqnpSSv5/8f2YELCutOe6A=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_observed_txin"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "007CA2A48A399FC10271FA86121840D56ACC48205AAEA1C65D2CCD49A1A7A230",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "id": "7a3169acefe699d98171a827fb8e0a87bc3e3200cdcf466c709dc251dfb87644",
+              "height": "11320470",
+              "blame": {
+                "fail_reason": "signers fail to sync before keygen/keysign",
+                "is_unicast": false,
+                "blame_nodes": [
+                  {
+                    "pubkey": "mayapub1addwnpepqdst3we8t68samg9jxv98y9r3szwfpgycg3qzvjavwlgrxfc05wlvc9ns2s",
+                    "blame_data": null,
+                    "blame_signature": null
+                  }
+                ],
+                "round": ""
+              },
+              "memo": "OUT:EF4B28F2E51B0F0B80B31B5D77C311B80F6EFAE54D21B820DDC34FCFE10A8001",
+              "coins": [
+                {
+                  "asset": "ARB.ETH",
+                  "amount": "2012699",
+                  "decimals": "0"
+                }
+              ],
+              "pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+              "signer": "maya1sh6utjmk293qene7pda4swtp62yj2tzn8ulkuy",
+              "@type": "/types.MsgTssKeysignFail"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "Auwrdsv3SBWxgU6fb3VZmDpo2FkGG/J+9FVpYJ9e7XOi",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "6326248"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "n1mRRheJ4aZMb3S4FExtGFPQwizuYdUQM2Zp3EqyISVjoCvMKwmUWq5zIpmstPqSUf5nTH8BIbz71Rqcls8uyw=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_tss_keysign_fail\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "1008997",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTFzaDZ1dGptazI5M3FlbmU3cGRhNHN3dHA2MnlqMnR6bjh1bGt1eQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTFzaDZ1dGptazI5M3FlbmU3cGRhNHN3dHA2MnlqMnR6bjh1bGt1eS82MzI2MjQ4",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "bjFtUlJoZUo0YVpNYjNTNEZFeHRHRlBRd2l6dVlkVVFNMlpwM0VxeUlTVmpvQ3ZNS3dtVVdxNXpJcG1zdFBxU1VmNW5USDhCSWJ6NzFScWNsczh1eXc9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X3Rzc19rZXlzaWduX2ZhaWw=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya1sh6utjmk293qene7pda4swtp62yj2tzn8ulkuy"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya1sh6utjmk293qene7pda4swtp62yj2tzn8ulkuy/6326248"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "n1mRRheJ4aZMb3S4FExtGFPQwizuYdUQM2Zp3EqyISVjoCvMKwmUWq5zIpmstPqSUf5nTH8BIbz71Rqcls8uyw=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_tss_keysign_fail"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "58D92BF5613D122260377EF06DCDFBFF5D4C50B9C1FAFFEFF75D5118FA0856C0",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "id": "7a3169acefe699d98171a827fb8e0a87bc3e3200cdcf466c709dc251dfb87644",
+              "height": "11320470",
+              "blame": {
+                "fail_reason": "signers fail to sync before keygen/keysign",
+                "is_unicast": false,
+                "blame_nodes": [
+                  {
+                    "pubkey": "mayapub1addwnpepqdst3we8t68samg9jxv98y9r3szwfpgycg3qzvjavwlgrxfc05wlvc9ns2s",
+                    "blame_data": null,
+                    "blame_signature": null
+                  }
+                ],
+                "round": ""
+              },
+              "memo": "OUT:EF4B28F2E51B0F0B80B31B5D77C311B80F6EFAE54D21B820DDC34FCFE10A8001",
+              "coins": [
+                {
+                  "asset": "ARB.ETH",
+                  "amount": "2012699",
+                  "decimals": "0"
+                }
+              ],
+              "pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+              "signer": "maya1a9yx064qcjn8en4eal5sqragshtqdq0dj6maya",
+              "@type": "/types.MsgTssKeysignFail"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "At90nIuRLHlAyWvVXsDT9aqGV5/ky/yerKrSzOkjqlk+",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "6508090"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "XlpU0m6DRaEyFCiovw+aTJ11/Uk2gjepkc2ScX6dSH5KkdW2IHL9ASp6K79nDMyMCv2l4zA6tAA2wOFpqO7zpw=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_tss_keysign_fail\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "1011637",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTFhOXl4MDY0cWNqbjhlbjRlYWw1c3FyYWdzaHRxZHEwZGo2bWF5YQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTFhOXl4MDY0cWNqbjhlbjRlYWw1c3FyYWdzaHRxZHEwZGo2bWF5YS82NTA4MDkw",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "WGxwVTBtNkRSYUV5RkNpb3Z3K2FUSjExL1VrMmdqZXBrYzJTY1g2ZFNINUtrZFcySUhMOUFTcDZLNzluRE15TUN2Mmw0ekE2dEFBMndPRnBxTzd6cHc9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X3Rzc19rZXlzaWduX2ZhaWw=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya1a9yx064qcjn8en4eal5sqragshtqdq0dj6maya"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya1a9yx064qcjn8en4eal5sqragshtqdq0dj6maya/6508090"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "XlpU0m6DRaEyFCiovw+aTJ11/Uk2gjepkc2ScX6dSH5KkdW2IHL9ASp6K79nDMyMCv2l4zA6tAA2wOFpqO7zpw=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_tss_keysign_fail"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "1A28E990B339CEE01D2EE8347C6B2B52324914E07D73BEA32BE1319EAA878119",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "txs": [
+                {
+                  "tx": {
+                    "id": "0D8AE88BC13225139193894B31E2329FA98FCC8E67E7D0AE4759F5B154059F7E",
+                    "chain": "THOR",
+                    "from_address": "thor17hwqt302e5f2xm4h95ma8wuggqkvfzgvsnh5z9",
+                    "to_address": "thor1egnvuppm2pzy8v77hfzqdaetmcz302sraygate",
+                    "coins": [
+                      {
+                        "asset": "THOR.RUNE",
+                        "amount": "14390566037",
+                        "decimals": "8"
+                      }
+                    ],
+                    "gas": [
+                      {
+                        "asset": "THOR.RUNE",
+                        "amount": "2000000",
+                        "decimals": "0"
+                      }
+                    ],
+                    "memo": "=:ETH/USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48:maya176820wmjp536wtsddxn4y52ghp3w23k747hard:29006742501"
+                  },
+                  "status": "incomplete",
+                  "out_hashes": [],
+                  "block_height": "21253751",
+                  "signers": [],
+                  "observed_pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+                  "keysign_ms": "0",
+                  "finalise_height": "21253751",
+                  "aggregator": "",
+                  "aggregator_target": "",
+                  "aggregator_target_limit": null
+                }
+              ],
+              "signer": "maya1n6vt5ft97ag6jrar0fhyr0vnzeaqtqjqaq7k5s",
+              "@type": "/types.MsgObservedTxIn"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "Azpd4EZr/g4Z2AwiWl0dttCZlKxASP953dVMz3cKUB1G",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "3286489"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "Mzm9nrnJFEWd1qQJNgKLtYT4QL0oaOQsYIPJBz0BYBkx8lde7Nq1YV9wBIA8CPTyrIU/Qc29M+Y4+2AINvzdDA=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_observed_txin\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "622026",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTFuNnZ0NWZ0OTdhZzZqcmFyMGZoeXIwdm56ZWFxdHFqcWFxN2s1cw==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTFuNnZ0NWZ0OTdhZzZqcmFyMGZoeXIwdm56ZWFxdHFqcWFxN2s1cy8zMjg2NDg5",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "TXptOW5ybkpGRVdkMXFRSk5nS0x0WVQ0UUwwb2FPUXNZSVBKQnowQllCa3g4bGRlN05xMVlWOXdCSUE4Q1BUeXJJVS9RYzI5TStZNCsyQUlOdnpkREE9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X29ic2VydmVkX3R4aW4=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya1n6vt5ft97ag6jrar0fhyr0vnzeaqtqjqaq7k5s"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya1n6vt5ft97ag6jrar0fhyr0vnzeaqtqjqaq7k5s/3286489"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "Mzm9nrnJFEWd1qQJNgKLtYT4QL0oaOQsYIPJBz0BYBkx8lde7Nq1YV9wBIA8CPTyrIU/Qc29M+Y4+2AINvzdDA=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_observed_txin"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "ED5385EDD670D9327239E897DFA4C54F9ABEAC24B762B9EA663633FF8808B1E8",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "id": "7a3169acefe699d98171a827fb8e0a87bc3e3200cdcf466c709dc251dfb87644",
+              "height": "11320470",
+              "blame": {
+                "fail_reason": "signers fail to sync before keygen/keysign",
+                "is_unicast": false,
+                "blame_nodes": [
+                  {
+                    "pubkey": "mayapub1addwnpepqdst3we8t68samg9jxv98y9r3szwfpgycg3qzvjavwlgrxfc05wlvc9ns2s",
+                    "blame_data": null,
+                    "blame_signature": null
+                  }
+                ],
+                "round": ""
+              },
+              "memo": "OUT:EF4B28F2E51B0F0B80B31B5D77C311B80F6EFAE54D21B820DDC34FCFE10A8001",
+              "coins": [
+                {
+                  "asset": "ARB.ETH",
+                  "amount": "2012699",
+                  "decimals": "0"
+                }
+              ],
+              "pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+              "signer": "maya1u38c2xfcrultnx9qfvd7p78jtr2q7xcd6scfdz",
+              "@type": "/types.MsgTssKeysignFail"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "ArlgxaDVFGDMmj2aCUHrBtczKeaYxYqKRHW1/Ar8PskI",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "723640"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "hOMOD/5Cd8X36Dzgj42g4Z/N7+tBJZw2egUhQR5P0fIi7N+m61e0D/c+292J7EkHQYY56V+LnD5gQ6vCcT2dpQ=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_tss_keysign_fail\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "1001511",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTF1MzhjMnhmY3J1bHRueDlxZnZkN3A3OGp0cjJxN3hjZDZzY2Zkeg==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTF1MzhjMnhmY3J1bHRueDlxZnZkN3A3OGp0cjJxN3hjZDZzY2Zkei83MjM2NDA=",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "aE9NT0QvNUNkOFgzNkR6Z2o0Mmc0Wi9ONyt0QkpadzJlZ1VoUVI1UDBmSWk3TittNjFlMEQvYysyOTJKN0VrSFFZWTU2VitMbkQ1Z1E2dkNjVDJkcFE9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X3Rzc19rZXlzaWduX2ZhaWw=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya1u38c2xfcrultnx9qfvd7p78jtr2q7xcd6scfdz"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya1u38c2xfcrultnx9qfvd7p78jtr2q7xcd6scfdz/723640"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "hOMOD/5Cd8X36Dzgj42g4Z/N7+tBJZw2egUhQR5P0fIi7N+m61e0D/c+292J7EkHQYY56V+LnD5gQ6vCcT2dpQ=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_tss_keysign_fail"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "B1CC14D0EC8A25EDE8ED29043F8A887CD1D40DDBDFDBF05D6377508A3FF6880F",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "txs": [
+                {
+                  "tx": {
+                    "id": "0D8AE88BC13225139193894B31E2329FA98FCC8E67E7D0AE4759F5B154059F7E",
+                    "chain": "THOR",
+                    "from_address": "thor17hwqt302e5f2xm4h95ma8wuggqkvfzgvsnh5z9",
+                    "to_address": "thor1egnvuppm2pzy8v77hfzqdaetmcz302sraygate",
+                    "coins": [
+                      {
+                        "asset": "THOR.RUNE",
+                        "amount": "14390566037",
+                        "decimals": "8"
+                      }
+                    ],
+                    "gas": [
+                      {
+                        "asset": "THOR.RUNE",
+                        "amount": "2000000",
+                        "decimals": "0"
+                      }
+                    ],
+                    "memo": "=:ETH/USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48:maya176820wmjp536wtsddxn4y52ghp3w23k747hard:29006742501"
+                  },
+                  "status": "incomplete",
+                  "out_hashes": [],
+                  "block_height": "21253751",
+                  "signers": [],
+                  "observed_pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+                  "keysign_ms": "0",
+                  "finalise_height": "21253751",
+                  "aggregator": "",
+                  "aggregator_target": "",
+                  "aggregator_target_limit": null
+                }
+              ],
+              "signer": "maya13ujl8ehjecnl84t6yjv8ddyvav89ua45anlga6",
+              "@type": "/types.MsgObservedTxIn"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "A2C4uydejw7tBZGYU5CjjATkhQTCIgEyXWO+gZk4fR32",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "3276085"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "himrz+qQwhS5fxa2VjeOkN2uZUwlVjyk+O2cpehOAuxpLQZ9883skUEw4tAWL1qiBuYFGFa70aPY7nt6yjUtKw=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_observed_txin\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "623280",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTEzdWpsOGVoamVjbmw4NHQ2eWp2OGRkeXZhdjg5dWE0NWFubGdhNg==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTEzdWpsOGVoamVjbmw4NHQ2eWp2OGRkeXZhdjg5dWE0NWFubGdhNi8zMjc2MDg1",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "aGltcnorcVF3aFM1ZnhhMlZqZU9rTjJ1WlV3bFZqeWsrTzJjcGVoT0F1eHBMUVo5ODgzc2tVRXc0dEFXTDFxaUJ1WUZHRmE3MGFQWTdudDZ5alV0S3c9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X29ic2VydmVkX3R4aW4=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya13ujl8ehjecnl84t6yjv8ddyvav89ua45anlga6"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya13ujl8ehjecnl84t6yjv8ddyvav89ua45anlga6/3276085"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "himrz+qQwhS5fxa2VjeOkN2uZUwlVjyk+O2cpehOAuxpLQZ9883skUEw4tAWL1qiBuYFGFa70aPY7nt6yjUtKw=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_observed_txin"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "AE052EF859A36944421E80C0F6EBBF2B2221C7217FBF98E5E7135BB51CA3DA42",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "id": "7a3169acefe699d98171a827fb8e0a87bc3e3200cdcf466c709dc251dfb87644",
+              "height": "11320470",
+              "blame": {
+                "fail_reason": "signers fail to sync before keygen/keysign",
+                "is_unicast": false,
+                "blame_nodes": [
+                  {
+                    "pubkey": "mayapub1addwnpepqdst3we8t68samg9jxv98y9r3szwfpgycg3qzvjavwlgrxfc05wlvc9ns2s",
+                    "blame_data": null,
+                    "blame_signature": null
+                  }
+                ],
+                "round": ""
+              },
+              "memo": "OUT:EF4B28F2E51B0F0B80B31B5D77C311B80F6EFAE54D21B820DDC34FCFE10A8001",
+              "coins": [
+                {
+                  "asset": "ARB.ETH",
+                  "amount": "2012699",
+                  "decimals": "0"
+                }
+              ],
+              "pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+              "signer": "maya13ujl8ehjecnl84t6yjv8ddyvav89ua45anlga6",
+              "@type": "/types.MsgTssKeysignFail"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "A2C4uydejw7tBZGYU5CjjATkhQTCIgEyXWO+gZk4fR32",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "3276086"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "4/5Enx0PPmovKcxXC5EC9DKQNYRbMhRF8p/9ppbMmXsQNJeIvwhIdCcbHIjP+TybDDj9LRrjBLCQB+duFIMFKQ=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_tss_keysign_fail\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "1008367",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTEzdWpsOGVoamVjbmw4NHQ2eWp2OGRkeXZhdjg5dWE0NWFubGdhNg==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTEzdWpsOGVoamVjbmw4NHQ2eWp2OGRkeXZhdjg5dWE0NWFubGdhNi8zMjc2MDg2",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "NC81RW54MFBQbW92S2N4WEM1RUM5REtRTllSYk1oUkY4cC85cHBiTW1Yc1FOSmVJdndoSWRDY2JISWpQK1R5YkREajlMUnJqQkxDUUIrZHVGSU1GS1E9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X3Rzc19rZXlzaWduX2ZhaWw=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya13ujl8ehjecnl84t6yjv8ddyvav89ua45anlga6"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya13ujl8ehjecnl84t6yjv8ddyvav89ua45anlga6/3276086"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "4/5Enx0PPmovKcxXC5EC9DKQNYRbMhRF8p/9ppbMmXsQNJeIvwhIdCcbHIjP+TybDDj9LRrjBLCQB+duFIMFKQ=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_tss_keysign_fail"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "76CA097C2360956FED0FFE1DEDCAE2CF2397E6847904F1E77C247F5BB4D1CEFB",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "txs": [
+                {
+                  "tx": {
+                    "id": "0D8AE88BC13225139193894B31E2329FA98FCC8E67E7D0AE4759F5B154059F7E",
+                    "chain": "THOR",
+                    "from_address": "thor17hwqt302e5f2xm4h95ma8wuggqkvfzgvsnh5z9",
+                    "to_address": "thor1egnvuppm2pzy8v77hfzqdaetmcz302sraygate",
+                    "coins": [
+                      {
+                        "asset": "THOR.RUNE",
+                        "amount": "14390566037",
+                        "decimals": "8"
+                      }
+                    ],
+                    "gas": [
+                      {
+                        "asset": "THOR.RUNE",
+                        "amount": "2000000",
+                        "decimals": "0"
+                      }
+                    ],
+                    "memo": "=:ETH/USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48:maya176820wmjp536wtsddxn4y52ghp3w23k747hard:29006742501"
+                  },
+                  "status": "incomplete",
+                  "out_hashes": [],
+                  "block_height": "21253751",
+                  "signers": [],
+                  "observed_pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+                  "keysign_ms": "0",
+                  "finalise_height": "21253751",
+                  "aggregator": "",
+                  "aggregator_target": "",
+                  "aggregator_target_limit": null
+                }
+              ],
+              "signer": "maya1sh6utjmk293qene7pda4swtp62yj2tzn8ulkuy",
+              "@type": "/types.MsgObservedTxIn"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "Auwrdsv3SBWxgU6fb3VZmDpo2FkGG/J+9FVpYJ9e7XOi",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "6326249"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "kqYgufQeUMGzPPlpVatbmXij7voIN/vzslz0PEVloQxCEmcySeoqL0+E5sQ5HLaeHqAju+i4SLpZAp91FeJWfA=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_observed_txin\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "629850",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTFzaDZ1dGptazI5M3FlbmU3cGRhNHN3dHA2MnlqMnR6bjh1bGt1eQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTFzaDZ1dGptazI5M3FlbmU3cGRhNHN3dHA2MnlqMnR6bjh1bGt1eS82MzI2MjQ5",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "a3FZZ3VmUWVVTUd6UFBscFZhdGJtWGlqN3ZvSU4vdnpzbHowUEVWbG9ReENFbWN5U2VvcUwwK0U1c1E1SExhZUhxQWp1K2k0U0xwWkFwOTFGZUpXZkE9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X29ic2VydmVkX3R4aW4=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya1sh6utjmk293qene7pda4swtp62yj2tzn8ulkuy"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya1sh6utjmk293qene7pda4swtp62yj2tzn8ulkuy/6326249"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "kqYgufQeUMGzPPlpVatbmXij7voIN/vzslz0PEVloQxCEmcySeoqL0+E5sQ5HLaeHqAju+i4SLpZAp91FeJWfA=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_observed_txin"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "356C5A1C59383D05CE520E41AAA531710AA72F87234378365FD80ED5C922B5EC",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "id": "7a3169acefe699d98171a827fb8e0a87bc3e3200cdcf466c709dc251dfb87644",
+              "height": "11320470",
+              "blame": {
+                "fail_reason": "signers fail to sync before keygen/keysign",
+                "is_unicast": false,
+                "blame_nodes": [
+                  {
+                    "pubkey": "mayapub1addwnpepqdst3we8t68samg9jxv98y9r3szwfpgycg3qzvjavwlgrxfc05wlvc9ns2s",
+                    "blame_data": null,
+                    "blame_signature": null
+                  }
+                ],
+                "round": ""
+              },
+              "memo": "OUT:EF4B28F2E51B0F0B80B31B5D77C311B80F6EFAE54D21B820DDC34FCFE10A8001",
+              "coins": [
+                {
+                  "asset": "ARB.ETH",
+                  "amount": "2012699",
+                  "decimals": "0"
+                }
+              ],
+              "pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+              "signer": "maya1pr2um0jcml827w5dk73cd8gzvq860v7vharlhe",
+              "@type": "/types.MsgTssKeysignFail"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "A6WC/k3TZlCEigwnMWuck4ozmUWlxWCY7aybvQAPOaMM",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "880691"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "Ti0h4mny29GBc3J2cmB/FZESgXXiXuk1FldEXF28QNBI+jTYcLuJRUvvYytRwJMer+CLZwvkcRF5HX0wjDiQ3g=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_tss_keysign_fail\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "1004946",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTFwcjJ1bTBqY21sODI3dzVkazczY2Q4Z3p2cTg2MHY3dmhhcmxoZQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTFwcjJ1bTBqY21sODI3dzVkazczY2Q4Z3p2cTg2MHY3dmhhcmxoZS84ODA2OTE=",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "VGkwaDRtbnkyOUdCYzNKMmNtQi9GWkVTZ1hYaVh1azFGbGRFWEYyOFFOQkkralRZY0x1SlJVdnZZeXRSd0pNZXIrQ0xad3ZrY1JGNUhYMHdqRGlRM2c9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X3Rzc19rZXlzaWduX2ZhaWw=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya1pr2um0jcml827w5dk73cd8gzvq860v7vharlhe"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya1pr2um0jcml827w5dk73cd8gzvq860v7vharlhe/880691"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "Ti0h4mny29GBc3J2cmB/FZESgXXiXuk1FldEXF28QNBI+jTYcLuJRUvvYytRwJMer+CLZwvkcRF5HX0wjDiQ3g=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_tss_keysign_fail"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "6533B7C848C8573F94A3A5727949CF02774489FC70DD8620EF15E59A6988C0A3",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "txs": [
+                {
+                  "tx": {
+                    "id": "0D8AE88BC13225139193894B31E2329FA98FCC8E67E7D0AE4759F5B154059F7E",
+                    "chain": "THOR",
+                    "from_address": "thor17hwqt302e5f2xm4h95ma8wuggqkvfzgvsnh5z9",
+                    "to_address": "thor1egnvuppm2pzy8v77hfzqdaetmcz302sraygate",
+                    "coins": [
+                      {
+                        "asset": "THOR.RUNE",
+                        "amount": "14390566037",
+                        "decimals": "8"
+                      }
+                    ],
+                    "gas": [
+                      {
+                        "asset": "THOR.RUNE",
+                        "amount": "2000000",
+                        "decimals": "0"
+                      }
+                    ],
+                    "memo": "=:ETH/USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48:maya176820wmjp536wtsddxn4y52ghp3w23k747hard:29006742501"
+                  },
+                  "status": "incomplete",
+                  "out_hashes": [],
+                  "block_height": "21253751",
+                  "signers": [],
+                  "observed_pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+                  "keysign_ms": "0",
+                  "finalise_height": "21253751",
+                  "aggregator": "",
+                  "aggregator_target": "",
+                  "aggregator_target_limit": null
+                }
+              ],
+              "signer": "maya1rxuxg6359ddsf2zh5ucumxa2466yc3pgaqvss8",
+              "@type": "/types.MsgObservedTxIn"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "As8TU5sTr+8PyOHLKd5XcqmSw07kQRnF5IcTv2WncnE7",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "6574655"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "+KjE+ZGe4F1LY7RbC/5tx2BaLFM4crI77GnwIBeQGDtdR6ZTaQwPb6CO3hL95/EVnDC+7bTg1RtNPXzim2ocGg=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_observed_txin\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "632484",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTFyeHV4ZzYzNTlkZHNmMnpoNXVjdW14YTI0NjZ5YzNwZ2FxdnNzOA==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTFyeHV4ZzYzNTlkZHNmMnpoNXVjdW14YTI0NjZ5YzNwZ2FxdnNzOC82NTc0NjU1",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "K0tqRStaR2U0RjFMWTdSYkMvNXR4MkJhTEZNNGNySTc3R253SUJlUUdEdGRSNlpUYVF3UGI2Q08zaEw5NS9FVm5EQys3YlRnMVJ0TlBYemltMm9jR2c9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X29ic2VydmVkX3R4aW4=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya1rxuxg6359ddsf2zh5ucumxa2466yc3pgaqvss8"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya1rxuxg6359ddsf2zh5ucumxa2466yc3pgaqvss8/6574655"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "+KjE+ZGe4F1LY7RbC/5tx2BaLFM4crI77GnwIBeQGDtdR6ZTaQwPb6CO3hL95/EVnDC+7bTg1RtNPXzim2ocGg=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_observed_txin"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "6B9743A3A85252CDE94BDDE1DCB67FE8973D9A52527C5A72A36278EEC1A8E34F",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "id": "7a3169acefe699d98171a827fb8e0a87bc3e3200cdcf466c709dc251dfb87644",
+              "height": "11320470",
+              "blame": {
+                "fail_reason": "signers fail to sync before keygen/keysign",
+                "is_unicast": false,
+                "blame_nodes": [
+                  {
+                    "pubkey": "mayapub1addwnpepqdst3we8t68samg9jxv98y9r3szwfpgycg3qzvjavwlgrxfc05wlvc9ns2s",
+                    "blame_data": null,
+                    "blame_signature": null
+                  }
+                ],
+                "round": ""
+              },
+              "memo": "OUT:EF4B28F2E51B0F0B80B31B5D77C311B80F6EFAE54D21B820DDC34FCFE10A8001",
+              "coins": [
+                {
+                  "asset": "ARB.ETH",
+                  "amount": "2012699",
+                  "decimals": "0"
+                }
+              ],
+              "pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+              "signer": "maya1748rmtly2raj3akg66lcwjygvy8nycv3nxnvua",
+              "@type": "/types.MsgTssKeysignFail"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "A8EGzVUAfbWToYPfTlZvwDPQ13etSX2GBVLCWfiQflPk",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "881001"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "EK0lLp0LHbEGZ+xNiNnsDWOfyzm0q/xO5uiXD4/lwc0woH64Rbi0wN2PMgEXZrWQ0OHR8aHy65p2lAKjSBkMTw=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_tss_keysign_fail\"}]},{\"type\":\"slash_points\",\"attributes\":[{\"key\":\"node_address\",\"value\":\"maya13ujl8ehjecnl84t6yjv8ddyvav89ua45anlga6\"},{\"key\":\"slash_points\",\"value\":\"2\"},{\"key\":\"reason\",\"value\":\"fail keysign\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "1122408",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTE3NDhybXRseTJyYWozYWtnNjZsY3dqeWd2eThueWN2M254bnZ1YQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTE3NDhybXRseTJyYWozYWtnNjZsY3dqeWd2eThueWN2M254bnZ1YS84ODEwMDE=",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "RUswbExwMExIYkVHWit4TmlObnNEV09meXptMHEveE81dWlYRDQvbHdjMHdvSDY0UmJpMHdOMlBNZ0VYWnJXUTBPSFI4YUh5NjVwMmxBS2pTQmtNVHc9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X3Rzc19rZXlzaWduX2ZhaWw=",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "slash_points",
+          "attributes": [
+            {
+              "key": "bm9kZV9hZGRyZXNz",
+              "value": "bWF5YTEzdWpsOGVoamVjbmw4NHQ2eWp2OGRkeXZhdjg5dWE0NWFubGdhNg==",
+              "index": true
+            },
+            {
+              "key": "c2xhc2hfcG9pbnRz",
+              "value": "Mg==",
+              "index": true
+            },
+            {
+              "key": "cmVhc29u",
+              "value": "ZmFpbCBrZXlzaWdu",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya1748rmtly2raj3akg66lcwjygvy8nycv3nxnvua"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya1748rmtly2raj3akg66lcwjygvy8nycv3nxnvua/881001"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "EK0lLp0LHbEGZ+xNiNnsDWOfyzm0q/xO5uiXD4/lwc0woH64Rbi0wN2PMgEXZrWQ0OHR8aHy65p2lAKjSBkMTw=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_tss_keysign_fail"
+          }
+        },
+        {
+          "type": "slash_points",
+          "attributes": {
+            "node_address": "maya13ujl8ehjecnl84t6yjv8ddyvav89ua45anlga6",
+            "slash_points": "2",
+            "reason": "fail keysign"
+          }
+        }
+      ]
+    },
+    {
+      "hash": "2A8B3AAB6B734A20630D413E118E18B3A9ECAE01C25A7B779EABEEDC0B341DB6",
+      "tx_content_json": {
+        "body": {
+          "messages": [
+            {
+              "id": "7a3169acefe699d98171a827fb8e0a87bc3e3200cdcf466c709dc251dfb87644",
+              "height": "11320470",
+              "blame": {
+                "fail_reason": "signers fail to sync before keygen/keysign",
+                "is_unicast": false,
+                "blame_nodes": [
+                  {
+                    "pubkey": "mayapub1addwnpepqdst3we8t68samg9jxv98y9r3szwfpgycg3qzvjavwlgrxfc05wlvc9ns2s",
+                    "blame_data": null,
+                    "blame_signature": null
+                  }
+                ],
+                "round": ""
+              },
+              "memo": "OUT:EF4B28F2E51B0F0B80B31B5D77C311B80F6EFAE54D21B820DDC34FCFE10A8001",
+              "coins": [
+                {
+                  "asset": "ARB.ETH",
+                  "amount": "2012699",
+                  "decimals": "0"
+                }
+              ],
+              "pub_key": "mayapub1addwnpepq0ml0gwrhxmpqfkupk3cs7rrc3p39jafvwwrznml5sr6yuhwr2hy24cvcjv",
+              "signer": "maya1m9l2fuezgfpa6vyt2x62jpuj6y6dyhwqwjlm9l",
+              "@type": "/types.MsgTssKeysignFail"
+            }
+          ],
+          "memo": "",
+          "timeout_height": "0",
+          "extension_options": [],
+          "non_critical_extension_options": []
+        },
+        "auth_info": {
+          "signer_infos": [
+            {
+              "public_key": {
+                "key": "AkIIGjlNC3Qhsmb4+DDNWiHwhiD40754FvZAm2ahy8P5",
+                "@type": "/cosmos.crypto.secp256k1.PubKey"
+              },
+              "mode_info": {
+                "single": {
+                  "mode": "SIGN_MODE_DIRECT"
+                }
+              },
+              "sequence": "6318175"
+            }
+          ],
+          "fee": {
+            "amount": [],
+            "gas_limit": "4000000000",
+            "payer": "",
+            "granter": ""
+          }
+        },
+        "signatures": [
+          "kuvV4YZYV9GBYkVLoWvZo5RaaIOXQ4RsnA71LDcIYYoucq6pyldWGzD9PH2O6hROk2fNDNsZ42qxez4PSP8TIA=="
+        ]
+      },
+      "result_log": "[{\"events\":[{\"type\":\"message\",\"attributes\":[{\"key\":\"action\",\"value\":\"set_tss_keysign_fail\"}]}]}]",
+      "result_gas_wanted": "4000000000",
+      "result_gas_used": "995170",
+      "result_events_raw": [
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "ZmVl",
+              "value": null,
+              "index": true
+            },
+            {
+              "key": "ZmVlX3BheWVy",
+              "value": "bWF5YTFtOWwyZnVlemdmcGE2dnl0Mng2MmpwdWo2eTZkeWh3cXdqbG05bA==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "YWNjX3NlcQ==",
+              "value": "bWF5YTFtOWwyZnVlemdmcGE2dnl0Mng2MmpwdWo2eTZkeWh3cXdqbG05bC82MzE4MTc1",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "tx",
+          "attributes": [
+            {
+              "key": "c2lnbmF0dXJl",
+              "value": "a3V2VjRZWllWOUdCWWtWTG9XdlpvNVJhYUlPWFE0UnNuQTcxTERjSVlZb3VjcTZweWxkV0d6RDlQSDJPNmhST2syZk5ETnNaNDJxeGV6NFBTUDhUSUE9PQ==",
+              "index": true
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "YWN0aW9u",
+              "value": "c2V0X3Rzc19rZXlzaWduX2ZhaWw=",
+              "index": true
+            }
+          ]
+        }
+      ],
+      "result_events_parsed": [
+        {
+          "type": "tx",
+          "attributes": {
+            "fee": null,
+            "fee_payer": "maya1m9l2fuezgfpa6vyt2x62jpuj6y6dyhwqwjlm9l"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "acc_seq": "maya1m9l2fuezgfpa6vyt2x62jpuj6y6dyhwqwjlm9l/6318175"
+          }
+        },
+        {
+          "type": "tx",
+          "attributes": {
+            "signature": "kuvV4YZYV9GBYkVLoWvZo5RaaIOXQ4RsnA71LDcIYYoucq6pyldWGzD9PH2O6hROk2fNDNsZ42qxez4PSP8TIA=="
+          }
+        },
+        {
+          "type": "message",
+          "attributes": {
+            "action": "set_tss_keysign_fail"
+          }
+        }
+      ]
+    }
+  ],
+  "is_template": false
+}

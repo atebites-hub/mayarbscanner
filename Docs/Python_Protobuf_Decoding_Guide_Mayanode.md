@@ -239,6 +239,68 @@ The script `scripts/decode_local_block_for_comparison.py` in this project demons
 
     This approach is less ideal than native parsing but can be a robust fallback for specific, troublesome messages.
 
+## Troubleshooting Common Issues
+
+### 1. `ImportError: cannot import name 'GenericAlias' from partially initialized module 'types'` (or similar for `MappingProxyType`)
+
+*   **Cause:** This error typically occurs if Python's import system, during its early startup phase, encounters a user-defined module or package named `types` (e.g., `your_protobuf_output_dir/types/__init__.py`) *before* it fully initializes the standard library `types` module. This can happen if `your_protobuf_output_dir/` (which contains the `types/` subdirectory) is added too broadly to `sys.path` or `PYTHONPATH`, especially if prepended.
+*   **Solution for `betterproto` with `pb_stubs` structure:**
+    *   Ensure your `betterproto` output directory (e.g., `proto/generated/pb_stubs/`) contains the compiled modules (`cosmos/`, `gogoproto/`, `google/`, `mayachain/`, `types/` etc., as subdirectories which are Python packages).
+    *   Instead of adding `proto/generated/pb_stubs/` directly to `sys.path`, add its **parent directory**, `proto/generated/`, to `sys.path`.
+    *   Then, in your Python code, import the generated stubs by referencing the `pb_stubs` package explicitly.
+    *   **Example `sys.path` modification (e.g., in `src/api_connections.py` or `src/common_utils.py`):**
+        ```python
+        import sys
+        import os
+        _current_script_dir = os.path.dirname(os.path.abspath(__file__))
+        _project_root = os.path.dirname(_current_script_dir) # If script is in src/
+        # Path to the PARENT of pb_stubs, i.e., 'proto/generated/'
+        _proto_generated_path = os.path.join(_project_root, "proto", "generated")
+
+        if _proto_generated_path not in sys.path:
+            sys.path.insert(0, _proto_generated_path) # Prepend to allow finding pb_stubs
+            # print(f"[script_name.py] Prepended to sys.path: {_proto_generated_path}")
+        ```
+    *   **Example import statement:**
+        ```python
+        # Import Tx from the __init__.py of pb_stubs.cosmos.tx.v1beta1
+        from pb_stubs.cosmos.tx.v1beta1 import Tx as CosmosTx
+        ```
+    *   **Rationale:** By adding `proto/generated/` to the path, `pb_stubs` becomes a top-level package that Python can find. Imports like `from pb_stubs.cosmos...` then correctly navigate *within* this package structure. The `pb_stubs/types/` module is then correctly treated as `pb_stubs.types` and does not conflict with the standard library `types` module during interpreter initialization.
+*   **If using `PYTHONPATH` environment variable:** Set `PYTHONPATH` to include `proto/generated/` (the parent of `pb_stubs`), not `proto/generated/pb_stubs/` itself.
+
+### 2. `ModuleNotFoundError: No module named 'pb_stubs.cosmos...'` (or similar)
+
+*   **Cause:** This means Python cannot find the `pb_stubs` package or the subsequent modules even after `sys.path` or `PYTHONPATH` modifications.
+*   **Checks:**
+    1.  Verify that `proto/generated/` (the directory *containing* `pb_stubs/`) is indeed on `sys.path` (print `sys.path` to confirm).
+    2.  Ensure that `proto/generated/pb_stubs/` actually exists and is populated with the compiled `.py` files and that it has an `__init__.py` file (it should, if `betterproto` ran correctly).
+    3.  Ensure that the subsequent directories like `proto/generated/pb_stubs/cosmos/`, `proto/generated/pb_stubs/cosmos/tx/`, `proto/generated/pb_stubs/cosmos/tx/v1beta1/` all exist and contain `__init__.py` files. `betterproto` should create these.
+    4.  Double-check your import statement for typos against the actual directory and file structure within `pb_stubs`. For instance, if `Tx` is defined in `proto/generated/pb_stubs/cosmos/tx/v1beta1/__init__.py`, then `from pb_stubs.cosmos.tx.v1beta1 import Tx` is correct.
+
+### 3. General Python Caching / Stale Code Execution
+
+*   **Issue:** You modify a Python file (e.g., a utility module like `common_utils.py` that might consume these Protobuf stubs or perform other parsing), but when you run a script that imports this module, your changes don't seem to take effect (e.g., new print statements don't appear, old behavior persists).
+*   **Cause:** This can be due to Python's caching mechanisms, which can be more persistent than just `__pycache__` directories. The Python interpreter might hold an old version of the module in memory, or your IDE (like VS Code or Cursor) might have its own caching or fail to pick up changes immediately.
+*   **Troubleshooting Steps:**
+    1.  **Save All Files:** Ensure all modified files are saved in your IDE.
+    2.  **Clear `__pycache__`:** First, try removing all `__pycache__` directories from your project. You can do this from your terminal in the project root:
+        ```bash
+        find . -type d -name '__pycache__' -exec rm -rf {} +
+        find . -type f -name '*.pyc' -delete
+        ```
+    3.  **IDE-Specific Actions:**
+        *   **Restart Python Kernel/Session:** If you are using an interactive environment (like Jupyter notebooks or an IDE's Python console), try restarting the kernel or Python session.
+        *   **Reload Window (VS Code/Cursor):** Sometimes, simply reloading the IDE window can help. In VS Code or Cursor, open the Command Palette (Cmd/Ctrl+Shift+P) and search for "Developer: Reload Window".
+    4.  **Full Environment Restart (More Drastic):** If the problem continues, a full environment restart is highly recommended:
+        *   Close your IDE completely.
+        *   Close all terminal sessions related to the project.
+        *   Re-open the project in your IDE.
+        *   Start a new terminal session.
+        *   Re-activate your Python virtual environment (e.g., `source .venv/bin/activate`).
+        *   Try running your script again. This often resolves stubborn caching issues.
+    5.  **Verify File Being Run:** Double-check that you are indeed running the script you *think* you are running and that it's importing the correct version of the module you modified. Temporary, unique print statements at the very top of the module and the script can help confirm this.
+
 ## Conclusion
 
 For most common tasks involving Cosmos SDK messages from Mayanode (like transactions from Tendermint RPC), the **`betterproto` method is highly recommended** due to its native Python integration, type safety, and ease of use once set up. The `subprocess` method should be reserved for specific complex types where native solutions fail or for diagnostic purposes.

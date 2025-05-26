@@ -182,3 +182,4 @@ src/.DS_Store
 # Local protoc compiler and sample output files
 bin/
 decoded_tx_sample.json
+mayanode_blocks.db

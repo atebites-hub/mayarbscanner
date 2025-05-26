@@ -25,6 +25,7 @@ Successfully handling Protobuf messages, particularly `cosmos.tx.v1beta1.Tx` fro
     -   Python stubs are generated into `proto/generated/pb_stubs/` using `python -m grpc_tools.protoc ... --python_betterproto_out=...` (see `Docs/Python_Protobuf_Decoding_Guide_Mayanode.md` for the exact command).
     -   **Crucially, both `proto/src/` and `proto/generated/pb_stubs/` ARE COMMITTED TO GIT.** This ensures that developers can use the pre-generated, working stubs without needing to replicate the `protoc` compilation environment, which proved to be highly sensitive to versions of `protoc`, `betterproto`, and dependent libraries.
     -   Required Python packages: `protobuf==4.21.12`, `betterproto[compiler]==2.0.0b7`, `grpclib`.
+    -   **Python Import Strategy:** To avoid conflicts (like the `types` module collision), Python scripts (e.g., `src/api_connections.py`, `src/common_utils.py`) should add the *parent directory* `proto/generated/` to `sys.path` and then import using the full path from `pb_stubs` (e.g., `from pb_stubs.cosmos.tx.v1beta1 import Tx as CosmosTx`). See `Docs/Python_Protobuf_Decoding_Guide_Mayanode.md` for a detailed explanation under Troubleshooting.
 -   **Fallback Method for Complex/Specific Mayanode Types (e.g., `types.MsgObservedTxOut`):** Using `protoc --decode` via `subprocess`.
     -   This method requires specific Mayanode `.proto` files (e.g., from commit `59743feb...`) and sometimes manual edits to these protos (like the `Tx.chain` `string` to `bytes` fix).
     -   A compatible `protoc` binary (e.g., v3.20.1) is needed.
@@ -43,7 +44,7 @@ This dual approach provides robust decoding for common cases and a reliable fall
     *   **Description:** Deep dive into Mayanode API & Tendermint RPC for block data. Implement robust functions in `src/api_connections.py` to fetch blocks by height, latest block, and historical ranges. Rewrite `src/fetch_realtime_transactions.py` to use these functions to download and store block data.
     *   **Endpoints:** Mayanode `/mayachain/block`, Tendermint `/block`, `/unconfirmed_txs`, `/num_unconfirmed_txs`.
     *   **Success Criteria:** `api_connections.py` has reliable block and mempool fetching. `src/fetch_realtime_transactions.py` can create a dataset of historical blocks.
-    *   **Status: COMPLETE**
+    *   **Status: COMPLETE & VERIFIED** (Historical catch-up, specific range/count/target fetching, and continuous polling modes implemented in `fetch_realtime_transactions.py` with improved console output using `tqdm` and `aiohttp` for async historical fetching).
 
 *   **Task 10.2.A.0: Investigate and Confirm Mayanode `/block` Endpoint Response Structure**
     *   **Description:** Determine the structure of data from `https://mayanode.mayachain.info/mayachain/block`.
@@ -51,12 +52,12 @@ This dual approach provides robust decoding for common cases and a reliable fall
     *   **Status: COMPLETE**
 
 *   **Task 10.2.A: Block Data Parsing and Schema Definition (`common_utils.py`)**
-    *   **Description:** Based on API responses, develop parsing logic in `src/common_utils.py`. For Tendermint RPC data (base64 protobuf transactions), integrate the output of Protobuf decoding (Task 10.2.C).
-    *   **Status: IN PROGRESS** (Core parsing logic for Mayanode JSON exists. Integration of decoded Tendermint protobuf transactions is next).
+    *   **Description:** Based on API responses, develop parsing logic in `src/common_utils.py`. For Tendermint RPC data (base64 protobuf transactions), integrate the output of Protobuf decoding (Task 10.2.C). Includes robust `signer` derivation, `camel_to_snake` conversion, and transformation of decoded Tendermint Tx to Mayanode-like JSON.
+    *   **Status: COMPLETE & VERIFIED** (Verbose debug logs removed, functions refined).
 
 *   **Task 10.2.B: Database Implementation and Data Ingestion Pipeline (`database_utils.py`, `fetch_realtime_transactions.py`)**
-    *   **Description:** Design schema (SQLite), implement DB utilities, and modify `fetch_realtime_transactions.py` for continuous polling and data ingestion.
-    *   **Status: IN PROGRESS** (Schema designed, core DB utils exist, ingestion script needs full integration with parsing and DB logic).
+    *   **Description:** Design a fully relational schema (SQLite), implement DB utilities in `database_utils.py` (including table creation, data insertion, and Mayanode JSON reconstruction). Modify `fetch_realtime_transactions.py` for continuous polling and data ingestion, using various fetching strategies (historical, range, count, target height, continuous polling) and improved console output.
+    *   **Status: COMPLETE & VERIFIED** (Core relational schema, insertion logic, and reconstruction function are implemented and tested. `fetch_realtime_transactions.py` uses these utilities for robust data ingestion with improved CLI feedback).
 
 *   **Task 10.2.C: Protobuf Decoding Setup & Implementation**
     *   **Description:** Establish and document reliable Protobuf decoding for `cosmos.tx.v1beta1.Tx` (from Tendermint) and a fallback for other complex types.
@@ -73,6 +74,16 @@ This dual approach provides robust decoding for common cases and a reliable fall
     *   **Description:** Create a script to fetch a block from Tendermint RPC and Mayanode API, decode Tendermint transactions, and save both blocks to JSON files for comparison. Also save raw Mayanode API response.
     *   **Success Criteria:** Script successfully fetches, decodes, and saves data. Output files allow for manual comparison and verification.
     *   **Status: COMPLETE**
+
+*   **Task 10.2.E: Flask App for Maya (CACAO) Dividend Viewer (New - replaces old 10.2.D)**
+    *   **Description:** Develop a Flask application to display Maya (CACAO) dividend payouts identified from Mayanode blocks. This involves fetching a significant number of blocks, storing them in the database, and then querying/displaying the dividend information.
+    *   **Sub-tasks & Status:**
+        *   **10.2.E.1: Research Maya (CACAO) Dividend Identification:** **COMPLETE**
+        *   **10.2.E.2: Enhance Data Ingestion for Bulk Block Fetching (as part of Task 10.2.B):** **COMPLETE** (`fetch_realtime_transactions.py` supports bulk historical catch-up).
+        *   **10.2.E.3: Implement Database Queries for Dividends (`database_utils.py`):** **PENDING**
+        *   **10.2.E.4: Develop Flask Application Structure & Logic (`app.py`):** **PENDING**
+        *   **10.2.E.5: Test End-to-End Pipeline & Data Accuracy:** **PENDING**
+    *   **Status: IN PROGRESS**
 
 *   **Task 10.3: Preprocessing for Block Prediction (`preprocess_ai_data.py`)**
     *   **Description:** Rewrite `src/preprocess_ai_data.py` to load parsed block data, implement feature engineering for block sequences, and generate training artifacts.
@@ -112,4 +123,6 @@ This dual approach provides robust decoding for common cases and a reliable fall
 - **Risk:** New or variant Protobuf messages requiring decoding adjustments. (Mitigation: Established `betterproto` workflow and `protoc --decode` fallback are adaptable. The guide provides a strong foundation).
 
 ## Next Steps
-- **Current Focus:** Finalize documentation updates. Prepare to start **Task 10.3: Preprocessing for Block Prediction**.
+- **Current Focus:** Begin development of **Task 10.2.E.3: Implement Database Queries for Dividends** as part of the Flask application task.
+- Proceed with remaining sub-tasks for the Flask App (10.2.E.4, 10.2.E.5).
+- Then move to **Task 10.3: Preprocessing for Block Prediction**.

@@ -3,6 +3,51 @@ import json
 import time
 from datetime import datetime, timezone # Added timezone
 
+import sys
+import os
+
+# --- Adjust sys.path for protobuf imports ---
+# This ensures that the generated protobuf stubs can be found.
+# The stubs are expected to be in 'proto/generated/pb_stubs/' relative to the project root.
+
+# Get the directory of the current script (e.g., mayarbscanner/src/api_connections.py)
+_current_script_dir = os.path.dirname(os.path.abspath(__file__))
+# Get the project root directory (e.g., 'mayarbscanner/') by going up one level from 'src/'
+_project_root = os.path.dirname(_current_script_dir)
+# Path to the parent of pb_stubs, i.e., 'proto/generated/'
+_proto_generated_path = os.path.join(_project_root, "proto", "generated")
+
+# Prepend the stubs path to sys.path if it's not already there
+if _proto_generated_path not in sys.path:
+    sys.path.insert(0, _proto_generated_path)
+    print(f"[api_connections.py] Prepended to sys.path for proto stubs (via proto/generated/): {_proto_generated_path}")
+
+# Try to import CosmosTx after adjusting path
+try:
+    # Import Tx from the __init__.py of pb_stubs.cosmos.tx.v1beta1
+    from pb_stubs.cosmos.tx.v1beta1 import Tx as CosmosTx
+    PROTOBUF_COSMOS_TX_AVAILABLE = True
+    print("[api_connections.py] Successfully imported CosmosTx (from pb_stubs.cosmos.tx.v1beta1 after sys.path mod to proto/generated/).")
+except ImportError as e:
+    print(f"[api_connections.py] ImportError during protobuf setup (from pb_stubs.cosmos.tx.v1beta1): {e}")
+    print(f"[api_connections.py] Warning: CosmosTx not available. Ensure stubs exist and check package structure in '{os.path.join(_proto_generated_path, 'pb_stubs', 'cosmos', 'tx', 'v1beta1')}'.")
+    PROTOBUF_COSMOS_TX_AVAILABLE = False
+
+# Import the centralized decoder and its availability flag from common_utils
+# This will be used by functions in this module that need to decode.
+if _project_root not in sys.path: # Ensure project root is in path for src import
+    sys.path.insert(0, _project_root)
+try:
+    from src.common_utils import decode_cosmos_tx_string_to_dict, PROTO_TYPES_AVAILABLE as COMMON_UTILS_PROTOBUF_AVAILABLE
+    print("[api_connections.py] Successfully imported decode_cosmos_tx_string_to_dict and PROTO_TYPES_AVAILABLE from src.common_utils.")
+except ImportError as e_cu:
+    print(f"[api_connections.py] Failed to import from src.common_utils: {e_cu}. Decoding will likely fail.")
+    # Define fallbacks if common_utils import fails, so script doesn't crash on undefined names
+    def decode_cosmos_tx_string_to_dict(tx_b64_string, default_hrp="maya"):
+        print("Critical Error: common_utils.decode_cosmos_tx_string_to_dict is not available!")
+        return tx_b64_string # Return original string
+    COMMON_UTILS_PROTOBUF_AVAILABLE = False
+
 # Configuration
 MAYANODE_BASE_URL = "https://mayanode.mayachain.info/mayachain"
 # TENDERMINT_RPC_BASE_URL = "https://rpc.mayachain.info"       # For Tendermint RPC (mempool, etc.) - This failed NameResolution
@@ -105,20 +150,20 @@ def fetch_mayanode_block(height=None):
             # which means directly under 'result'.
         }
 
-        fetched_height = reconstructed_for_parser.get("header", {}).get("height")
-        print(f"Successfully fetched and processed RPC block data. Reported height: {fetched_height}")
-        if height is not None and str(height) != fetched_height:
-            print(f"Warning: Requested height {height} but block data reports height {fetched_height}.")
+        fetched_height_val = reconstructed_for_parser.get("header", {}).get("height") # This is an int
+        print(f"Successfully fetched and processed RPC block data. Reported height: {fetched_height_val}")
+        if height is not None and height != fetched_height_val:
+            print(f"Warning: Requested height {height} but block data reports height {fetched_height_val}.")
         
         return reconstructed_for_parser
 
     # Fallback for direct block data structure (if not wrapped in JSON-RPC)
     # This was the original assumption.
     elif response_data and isinstance(response_data, dict) and "header" in response_data and "id" in response_data: # "id" was used for block_id
-        fetched_height = response_data.get("header", {}).get("height")
-        print(f"Successfully fetched direct block data. Reported height: {fetched_height}")
-        if height is not None and str(height) != fetched_height:
-            print(f"Warning: Requested height {height} but block data reports height {fetched_height}.")
+        fetched_height_val = response_data.get("header", {}).get("height") # This is an int
+        print(f"Successfully fetched direct block data. Reported height: {fetched_height_val}")
+        if height is not None and height != fetched_height_val:
+            print(f"Warning: Requested height {height} but block data reports height {fetched_height_val}.")
         
         return response_data
     elif response_data:
@@ -185,40 +230,127 @@ def fetch_mayanode_unconfirmed_txs(limit: int = 30):
         return None
 
 # --- Tendermint RPC Functions ---
-def fetch_tendermint_unconfirmed_txs(limit: int = 100): # Default to 100 (common max)
-    """Fetches unconfirmed transactions from the Tendermint RPC /unconfirmed_txs endpoint.
+
+def fetch_tendermint_rpc_block_raw(height: int):
+    """Fetches a raw block by height directly from the Tendermint RPC endpoint.
+    This should return block data with transactions as base64 encoded strings.
+    """
+    if not TENDERMINT_RPC_BASE_URL:
+        print("ERROR: fetch_tendermint_rpc_block_raw - TENDERMINT_RPC_BASE_URL is not set.")
+        return None
+
+    endpoint = "/block"
+    params = {"height": str(height)}
+    api_description = f"Tendermint RPC for Raw Block {height}"
+    url = f"{TENDERMINT_RPC_BASE_URL}{endpoint}"
+
+    response_data = fetch_api_data(url, api_description, params=params)
+
+    # Expecting a JSON-RPC wrapped response: response_data.result.block.data.txs should be b64 strings
+    if response_data and isinstance(response_data, dict) and "result" in response_data and \
+       isinstance(response_data["result"], dict) and "block" in response_data["result"]:
+        # We return the "result" part which contains "block" and "block_id"
+        print(f"Successfully fetched raw block data from Tendermint RPC for height {height}.")
+        return response_data["result"] 
+    elif response_data:
+        print(f"Error: Fetched data from Tendermint RPC for block {height}, but it does not match expected structure.")
+        print(f"Sample of unexpected data (first 500 chars): {str(response_data)[:500]}")
+        return None
+    else:
+        print(f"Failed to fetch raw block data from Tendermint RPC for height {height}.")
+        return None
+
+def fetch_tendermint_rpc_block_results(height: int) -> dict | None:
+    """Fetches block results by height directly from the Tendermint RPC endpoint.
+    This includes begin_block_events, end_block_events, and tx_results.
+    """
+    if not TENDERMINT_RPC_BASE_URL:
+        print("ERROR: fetch_tendermint_rpc_block_results - TENDERMINT_RPC_BASE_URL is not set.")
+        return None
+
+    endpoint = "/block_results"
+    params = {"height": str(height)}
+    api_description = f"Tendermint RPC for Block Results {height}"
+    url = f"{TENDERMINT_RPC_BASE_URL}{endpoint}"
+
+    response_data = fetch_api_data(url, api_description, params=params)
+
+    # Expecting a JSON-RPC wrapped response: response_data.result should contain the results
+    if response_data and isinstance(response_data, dict) and "result" in response_data:
+        # Minimal check: ensure 'result' is a dict and contains 'height'
+        if isinstance(response_data["result"], dict) and "height" in response_data["result"]:
+            # Further check: ensure the height matches (it's a string in block_results)
+            if response_data["result"]["height"] == str(height):
+                print(f"Successfully fetched Tendermint block results for height {height}.")
+                return response_data["result"] # Return the content of the "result" field
+            else:
+                print(f"Warning: Requested block results for height {height}, but response is for height {response_data['result']['height']}.")
+                # Still return it, caller can decide
+                return response_data["result"]
+        else:
+            print(f"Error: Tendermint block results for height {height} does not have a valid 'result' dictionary with 'height'.")
+            print("Sample of unexpected result (first 500 chars):", str(response_data.get("result"))[:500])
+            return None
+    elif response_data: # Got some response, but not the expected structure
+        print(f"Error: Unexpected structure for Tendermint block results for height {height}.")
+        print("Sample of unexpected data (first 500 chars):", str(response_data)[:500])
+        return None
+    else:
+        print(f"Failed to fetch Tendermint block results for height {height}.")
+        return None
+
+def fetch_decoded_tendermint_mempool_txs(limit: int = 100): # Renamed and will add decoding
+    """Fetches unconfirmed transactions from the Tendermint RPC /unconfirmed_txs endpoint
+    and decodes them into dictionaries.
     Fetches up to the specified limit (max typically 100 for public Tendermint RPCs).
     """
     if not TENDERMINT_RPC_BASE_URL:
-        print("WARNING: fetch_tendermint_unconfirmed_txs - TENDERMINT_RPC_BASE_URL is not set.")
+        print("WARNING: fetch_decoded_tendermint_mempool_txs - TENDERMINT_RPC_BASE_URL is not set.")
         print("This function will return an empty list. Update when a valid endpoint is known.")
         return [] 
 
     endpoint = "/unconfirmed_txs"
-    # Tendermint RPC often expects numbers as strings in query params
     params = {"limit": str(limit)} if limit is not None else {}
     api_description = f"Tendermint RPC for Unconfirmed Txs (limit {limit if limit is not None else 'default'})"
     url = f"{TENDERMINT_RPC_BASE_URL}{endpoint}"
 
     response_data = fetch_api_data(url, api_description, params=params)
+    decoded_tx_list = []
 
     if response_data and isinstance(response_data, dict):
         if "result" in response_data and isinstance(response_data["result"], dict) and "txs" in response_data["result"]:
-            txs_list = response_data["result"]["txs"]
+            txs_base64_list = response_data["result"]["txs"]
             n_txs = response_data["result"].get("n_txs", "N/A") # Count in this response
             total_txs = response_data["result"].get("total", "N/A") # Total in mempool
-            print(f"Successfully fetched unconfirmed transactions. Count in response: {n_txs}, Total in mempool: {total_txs}")
+            print(f"Successfully fetched unconfirmed transaction strings. Count in response: {n_txs}, Total in mempool: {total_txs}")
             if n_txs != total_txs:
-                print(f"WARNING: Fetched {n_txs} transactions, but mempool reports {total_txs} total. Endpoint may have a limit.")
-            if txs_list is None: # Handle case where 'txs' key exists but is null (empty mempool)
+                print(f"WARNING: Fetched {n_txs} transaction strings, but mempool reports {total_txs} total. Endpoint may have a limit.")
+            
+            if txs_base64_list is None: # Handle case where 'txs' key exists but is null (empty mempool)
                  print("Mempool is likely empty or 'txs' is null in response.")
                  return [] # Return empty list for consistency
-            return txs_list # This will be a list of base64 encoded tx strings
+
+            if COMMON_UTILS_PROTOBUF_AVAILABLE: # Check if our common_utils decoder is ready
+                print(f"Decoding {len(txs_base64_list)} transaction strings using common_utils.decode_cosmos_tx_string_to_dict...")
+                for i, tx_b64_string in enumerate(txs_base64_list):
+                    # Call the centralized decoder from common_utils
+                    decoded_tx = decode_cosmos_tx_string_to_dict(tx_b64_string)
+                    if isinstance(decoded_tx, dict):
+                        decoded_tx_list.append(decoded_tx)
+                    else:
+                        print(f"Warning: Tx index {i} failed to decode into a dict. Original b64 (preview): {tx_b64_string[:50]}...")
+                        # Optionally, append the raw string (which is what decode_cosmos_tx_string_to_dict returns on failure)
+                        # decoded_tx_list.append(decoded_tx) # Or skip, or add a specific error marker
+                print(f"Successfully decoded {len(decoded_tx_list)} transactions out of {len(txs_base64_list)} strings.")
+                return decoded_tx_list
+            else:
+                print("Warning: Protobuf decoding not available via common_utils. Returning raw base64 strings instead.")
+                return txs_base64_list # Fallback to returning raw strings if decoder isn't working
         else:
             print("Error: Fetched data for unconfirmed_txs, but it does not match expected Tendermint structure (missing 'result.txs').")
             print("Full response (first 500 chars):", str(response_data)[:500])
-            return None
-    elif response_data: # e.g. if it's not a dictionary or unexpected format
+            return None # Indicate an error in fetching/parsing the structure
+    elif response_data: 
         print("Error: Fetched data for unconfirmed_txs, but it is not a dictionary or is in an unexpected format.")
         print("Sample of unexpected data (first 500 chars):", str(response_data)[:500])
         return None
@@ -293,14 +425,18 @@ def construct_next_block_template():
     # 2. Fetch unconfirmed transactions
     # Fetches up to 100 by default, which is a common max for /unconfirmed_txs.
     # If more sophisticated fetching of *all* txs is needed (e.g. if mempool > 100 and endpoint limits),
-    # fetch_tendermint_unconfirmed_txs would need to handle pagination if the RPC supports it (not standard for this call).
-    unconfirmed_tx_strings = fetch_tendermint_unconfirmed_txs(limit=100) 
-    if unconfirmed_tx_strings is None:
-        print("Warning: Could not fetch unconfirmed transactions. Proceeding with empty tx list for template.")
-        unconfirmed_tx_strings = []
+    # fetch_decoded_tendermint_mempool_txs would need to handle pagination if the RPC supports it (not standard for this call).
+    unconfirmed_txs = fetch_decoded_tendermint_mempool_txs(limit=100) 
+    if unconfirmed_txs is None: # This now means an error or API issue
+        print("Warning: Could not fetch and decode unconfirmed transactions. Proceeding with empty tx list for template.")
+        unconfirmed_tx_list_for_template = []
+    elif all(isinstance(tx, dict) for tx in unconfirmed_txs): # Successfully decoded
+        print(f"Retrieved {len(unconfirmed_txs)} DECODED unconfirmed transactions for the template.")
+        unconfirmed_tx_list_for_template = unconfirmed_txs # These are dicts
+    else: # Got a list, but not all dicts (e.g., raw strings if decoding failed as fallback)
+        print(f"Warning: Retrieved {len(unconfirmed_txs)} items from mempool, but not all are decoded dicts. Using as is for template.")
+        unconfirmed_tx_list_for_template = unconfirmed_txs # Can be mixed, or all raw
     
-    print(f"Retrieved {len(unconfirmed_tx_strings)} unconfirmed transaction strings for the template.")
-
     # 3. Construct the template
     next_block_template = {
         "id": {
@@ -331,9 +467,10 @@ def construct_next_block_template():
         },
         "begin_block_events": [], # Placeholder, typically generated during block processing
         "end_block_events": [],   # Placeholder, typically generated during block processing
-        "txs": unconfirmed_tx_strings # Raw base64 encoded strings
-        # The actual "BlockTx" structure with hash, tx, result will be formed when block is finalized.
-        # For a template, just having the raw txs is the main goal from mempool.
+        "txs": unconfirmed_tx_list_for_template 
+        # The template's "txs" field will now ideally contain decoded dicts. 
+        # If decoding failed and raw strings were returned, it will contain those.
+        # Downstream consumers of the template need to be aware of this possibility if PROTOBUF_COSMOS_TX_AVAILABLE is false.
     }
     
     print("Next block template constructed.")
@@ -359,7 +496,7 @@ if __name__ == "__main__":
             block_historical = fetch_mayanode_block(height=recent_historical_height)
             if block_historical:
                 print(f"Successfully fetched block {recent_historical_height}. Keys:", list(block_historical.keys()))
-                if block_historical.get("header", {}).get("height") == str(recent_historical_height):
+                if block_historical.get("header", {}).get("height") == recent_historical_height:
                     print(f"Block {recent_historical_height}: Header height matches requested height.")
                 else:
                     print(f"Block {recent_historical_height}: MISMATCH - Fetched block header height {block_historical.get('header', {}).get('height')} vs requested {recent_historical_height}")
@@ -374,8 +511,8 @@ if __name__ == "__main__":
     print("\n--- Test 2: Fetching the latest block ---")
     latest_block_data = fetch_mayanode_block()
     if latest_block_data:
-        latest_height_from_data = latest_block_data.get("header", {}).get("height")
-        print(f"Successfully fetched latest block. Reported height: {latest_height_from_data}. Keys: {list(latest_block_data.keys())}")
+        latest_height_from_data_val = latest_block_data.get("header", {}).get("height") # This is an int
+        print(f"Successfully fetched latest block. Reported height: {latest_height_from_data_val}. Keys: {list(latest_block_data.keys())}")
         # print(json.dumps(latest_block_data, indent=2)) # Potentially very large output
     else:
         print("Failed to fetch the latest block.")
@@ -384,16 +521,16 @@ if __name__ == "__main__":
 
     # 3. Test getting the latest block height directly
     print("\n--- Test 3: Getting the latest block height ---")
-    latest_retrieved_height = get_mayanode_latest_block_height()
-    if latest_retrieved_height:
-        print(f"Latest block height successfully retrieved: {latest_retrieved_height}")
-        if latest_block_data and latest_height_from_data:
-             if str(latest_retrieved_height) == latest_height_from_data:
+    latest_retrieved_height_val = get_mayanode_latest_block_height() # This returns an int
+    if latest_retrieved_height_val:
+        print(f"Latest block height successfully retrieved: {latest_retrieved_height_val}")
+        if latest_block_data and latest_height_from_data_val is not None: # Check latest_height_from_data_val is not None
+             if latest_retrieved_height_val == latest_height_from_data_val:
                  print("Latest height from get_mayanode_latest_block_height() matches height from fetched latest block.")
-             elif abs(latest_retrieved_height - int(latest_height_from_data)) <= 5: # Allow for new blocks in between calls
-                 print(f"Note: Latest height from get_mayanode_latest_block_height() ({latest_retrieved_height}) is close to latest block's height ({latest_height_from_data}). This is acceptable.")
+             elif abs(latest_retrieved_height_val - latest_height_from_data_val) <= 5: # Allow for new blocks in between calls
+                 print(f"Note: Latest height from get_mayanode_latest_block_height() ({latest_retrieved_height_val}) is close to latest block's height ({latest_height_from_data_val}). This is acceptable.")
              else:
-                 print(f"Warning: Latest height from get_mayanode_latest_block_height() ({latest_retrieved_height}) differs significantly from latest block's height ({latest_height_from_data}).")
+                 print(f"Warning: Latest height from get_mayanode_latest_block_height() ({latest_retrieved_height_val}) differs significantly from latest block's height ({latest_height_from_data_val}).")
     else:
         print("Failed to retrieve the latest block height.")
 
@@ -406,15 +543,18 @@ if __name__ == "__main__":
 
     time.sleep(1)
     # 4. Test fetching unconfirmed transactions from Tendermint RPC
-    print("\n--- Test 4: Fetching unconfirmed transactions (Tendermint RPC) ---")
-    unconfirmed_txs = fetch_tendermint_unconfirmed_txs(limit=5)
-    if unconfirmed_txs is not None: # Check for None explicitly, as empty list is a valid success (empty mempool)
-        print(f"Fetched {len(unconfirmed_txs)} unconfirmed transaction(s) via Tendermint RPC.")
-        if len(unconfirmed_txs) > 0:
-            print("Sample of first unconfirmed tx (base64 encoded string) from Tendermint RPC:")
-            print(unconfirmed_txs[0][:100] + "...") # Print first 100 chars of the first tx
-        else:
-            print("Failed to fetch or parse unconfirmed transactions response from Tendermint RPC.")
+    print("\n--- Test 4: Fetching DECODED unconfirmed transactions (Tendermint RPC) ---")
+    decoded_mempool_txs = fetch_decoded_tendermint_mempool_txs(limit=5)
+    if decoded_mempool_txs is not None: # Check for None explicitly, as empty list is a valid success
+        print(f"Fetched {len(decoded_mempool_txs)} decoded unconfirmed transaction(s) via Tendermint RPC.")
+        if len(decoded_mempool_txs) > 0 and isinstance(decoded_mempool_txs[0], dict):
+            print("Sample of first decoded unconfirmed tx (first 200 chars of JSON):")
+            print(json.dumps(decoded_mempool_txs[0], indent=2)[:200] + "...")
+        elif len(decoded_mempool_txs) > 0: # Got something, but not a dict (e.g. raw string fallback)
+            print("Sample of first item (not a dict, likely raw base64 string due to decoding issue):")
+            print(str(decoded_mempool_txs[0])[:100] + "...")
+    else:
+        print("Call to fetch_decoded_tendermint_mempool_txs failed or returned None (API error).")
 
     time.sleep(1)
     # 5. Test fetching number of unconfirmed transactions from Tendermint RPC

@@ -36,7 +36,7 @@ Further details of this new approach are documented in `Docs/Implementation Plan
 
 ## Getting Started: Step-by-Step Instructions (NEW - Phase 10 Focus)
 
-Follow these steps to set up the project environment. The primary focus is on data fetching, parsing (including Protobuf decoding), and comparison, which are prerequisites for AI model development.
+Follow these steps to set up the project environment. The primary focus is on data fetching, parsing (including Protobuf decoding), database storage, and comparison, which are prerequisites for AI model development.
 
 ### 1. Setup
 
@@ -65,8 +65,13 @@ Follow these steps to set up the project environment. The primary focus is on da
       -   **Source `.proto` files** are located in `proto/src/`.
       -   **Pre-generated Python stubs** (using `betterproto`) are located in `proto/generated/pb_stubs/`.
       -   **Both of these directories are committed to Git.** This means you **DO NOT need to run a `protoc` compilation step yourself** to use the primary `CosmosTx` decoding functionality.
-      -   The Python scripts (e.g., `scripts/compare_block_data.py`) are configured to use these pre-generated stubs.
+      -   The Python scripts (e.g., `src/api_connections.py`, `src/common_utils.py`) are configured to use these pre-generated stubs by dynamically adding `proto/generated/` (the parent of `pb_stubs/`) to `sys.path` at runtime. This allows imports like `from pb_stubs.cosmos.tx.v1beta1 import Tx`.
+      -   **Linter Configuration (Pylance/Pyright):** To help linters resolve these dynamic imports, add `"./proto/generated"` to your `python.analysis.extraPaths` in your VS Code workspace settings (`.vscode/settings.json`). See `Docs/Python_Protobuf_Decoding_Guide_Mayanode.md` (Troubleshooting section) for more details.
       -   For detailed information on how these were generated, or if you need to regenerate them or decode other message types, refer to `Docs/Python_Protobuf_Decoding_Guide_Mayanode.md`.
+
+   e. **Troubleshooting Note - Stale Code Execution / Python Caching:**
+      - If you make changes to Python files (especially utility modules like `src/common_utils.py`) and these changes don't seem to take effect, you might be encountering a Python caching issue.
+      - This topic is now covered in more detail in `Docs/Python_Protobuf_Decoding_Guide_Mayanode.md` under the "General Python Caching / Stale Code Execution" troubleshooting section.
 
 ### 2. Key Scripts & Data
 
@@ -75,8 +80,10 @@ Follow these steps to set up the project environment. The primary focus is on da
         -   Tendermint RPC: `https://tendermint.mayachain.info/block`
    -   **Core Logic & Utilities:**
         -   `src/api_connections.py`: Fetches data from Mayanode and Tendermint.
-        -   `src/common_utils.py`: General parsing utilities.
-        -   `Docs/Python_Protobuf_Decoding_Guide_Mayanode.md`: Essential reading for understanding Protobuf decoding.
+        -   `src/common_utils.py`: General parsing utilities for block and transaction data, including Protobuf transformations.
+        -   `src/database_utils.py`: SQLite database operations (schema, insertion, reconstruction).
+        -   `src/fetch_realtime_transactions.py`: Main script for fetching and ingesting block data into the database. Supports historical catch-up (async with `aiohttp`), specific range/count/target fetching, and continuous polling. Features improved console output with `tqdm`.
+        -   `Docs/Python_Protobuf_Decoding_Guide_Mayanode.md`: Essential reading for understanding Protobuf decoding and Python environment troubleshooting.
         -   `proto/src/`: Source `.proto` files.
         -   `proto/generated/pb_stubs/`: Pre-generated Python stubs for `betterproto`.
    -   **Example & Test Scripts:**
@@ -88,70 +95,58 @@ Follow these steps to set up the project environment. The primary focus is on da
 
    To see the current data fetching, decoding, and comparison in action:
    ```bash
-   python scripts/compare_block_data.py
+   python scripts/compare_block_data.py --block <BLOCK_HEIGHT>
    ```
+   Replace `<BLOCK_HEIGHT>` with a recent block number (e.g., 11320570).
    This will:
-   1.  Fetch a predefined block (e.g., 11255442) from Tendermint RPC.
-   2.  Decode its transactions using the `betterproto` stubs.
-   3.  Save the decoded Tendermint block to `comparison_outputs/tendermint_block_11255442_decoded.json`.
-   4.  Fetch the same block from the Mayanode API and save the raw response to `comparison_outputs/mayanode_api_block_11255442_raw.json`.
-   5.  Fetch the same block again using `fetch_mayanode_block` (which reconstructs it to a Tendermint-like structure) and save it to `comparison_outputs/mayanode_api_block_11255442_reconstructed.json`.
-   6.  Print a summary comparison.
+   1.  Fetch the specified block from Tendermint RPC.
+   2.  Decode its transactions using the `betterproto` stubs via `src/common_utils.py`.
+   3.  Save the decoded and transformed Tendermint block to `comparison_outputs/tendermint_block_<BLOCK_HEIGHT>_decoded_transformed.json`.
+   4.  Fetch the same block from the Mayanode API and save the raw response to `comparison_outputs/mayanode_api_block_<BLOCK_HEIGHT>_raw.json`.
+   5.  Parse the raw Mayanode API response using `src/common_utils.py` and save it to `comparison_outputs/mayanode_api_block_<BLOCK_HEIGHT>_parsed.json`.
+   6.  Print a summary comparison of key fields and transaction alignment.
 
    You can then inspect the JSON files in the `comparison_outputs/` directory.
 
-### 4. Next Steps in Development (Block Prediction Model)
+### 4. Running the Data Ingestion Service
 
-   With data fetching and Protobuf decoding for Tendermint transactions established, the next steps involve:
-   -   Refining data parsing in `src/common_utils.py` to integrate decoded Tendermint transaction data.
-   -   Completing the data ingestion pipeline into the SQLite database (`src/fetch_realtime_transactions.py`, `src/database_utils.py`).
-   -   Developing `src/preprocess_ai_data.py` for feature engineering from block data.
-   -   Adapting/creating the generative AI model (`src/model.py`) for block prediction.
-   -   Updating training (`src/train_model.py`) and evaluation scripts.
+   `src/fetch_realtime_transactions.py` is used to populate the SQLite database (`mayanode_blocks.db`).
+
+   **Example: Historical Catch-up (recommended for initial population)**
+   To fetch the last 20,000 blocks and store them:
+   ```bash
+   python -m src.fetch_realtime_transactions --historical-catchup 20000
+   ```
+   This uses asynchronous fetching for speed and provides a `tqdm` progress bar.
+
+   **Example: Continuous Polling (after historical catch-up)**
+   To continuously monitor for and fetch new blocks:
+   ```bash
+   python -m src.fetch_realtime_transactions
+   ```
+   Other options like `--fetch-range`, `--fetch-count`, and `--target-height` are available. Use `python -m src.fetch_realtime_transactions --help` for details.
+
+### 5. Next Steps in Development (Block Prediction Model & Flask App)
+
+   With data fetching, decoding, and database ingestion established:
+   -   **Flask App for CACAO Dividends (Task 10.2.E):**
+       -   Implement database queries in `src/database_utils.py` to identify CACAO dividend transactions.
+       -   Develop the Flask application (`app.py`) to display this information.
+   -   **AI Model Development (Tasks 10.3 onwards):**
+       -   Developing `src/preprocess_ai_data.py` for feature engineering from block data.
+       -   Adapting/creating the generative AI model (`src/model.py`) for block prediction.
+       -   Updating training (`src/train_model.py`) and evaluation scripts.
 
 ## Project Structure (Reflecting Cleaned State & New Focus)
 
 -   `src/`:
     -   `fetch_realtime_transactions.py`: For downloading historical Mayanode blocks and future continuous database ingestion.
     -   `api_connections.py`: Functions to connect to Mayanode REST API and Tendermint RPC.
-    -   `common_utils.py`: Parsing block and transaction data.
-    -   `database_utils.py`: SQLite database operations.
+    -   `common_utils.py`: Parsing block and transaction data, including Protobuf transformations.
+    -   `database_utils.py`: SQLite database operations (schema, insertion, reconstruction).
     -   `preprocess_ai_data.py`: (To be developed) Feature engineering for block prediction.
     -   `model.py`: (To be developed) Generative block prediction model.
     -   `train_model.py`: (To be adapted) Training script for the block model.
+    -   `app.py`: (To be developed) Flask application for CACAO dividend viewer and future model insights.
     -   *(Other evaluation/inference scripts to be added for block model)*
--   `proto/`:
-    -   `src/`: Source `.proto` files (committed to Git).
-    -   `generated/pb_stubs/`: Python stubs generated by `betterproto` (committed to Git).
--   `scripts/`:
-    -   `compare_block_data.py`: Compares blocks from Mayanode and Tendermint, demonstrating `betterproto` decoding.
-    -   `test_mayanode_decoding.py`: Further tests `betterproto` decoding of `CosmosTx`.
-    -   `decode_local_block_for_comparison.py`: Demonstrates `subprocess` fallback for `MsgObservedTxOut`.
--   `comparison_outputs/`: Directory where `compare_block_data.py` saves its JSON output files.
--   `data/`: Stores raw and processed data, sample transactions for testing (historical, currently minimal).
--   `models/`: Stores trained model weights (`*.pth`).
--   `Docs/`: Contains detailed documentation:
-    -   `Implementation Plan.md`: Project phases, tasks, and deliverables.
-    -   `Project Requirements.md`: Objectives and success criteria.
-    -   `Technology Resources.md`: Links to key technologies.
-    -   `Mayanode_API_Cheat_Sheet.md`: Notes on Mayanode API endpoints.
-    -   `Python_Protobuf_Decoding_Guide_Mayanode.md`: **Essential guide for Protobuf handling.**
--   `requirements.txt`: Python package dependencies.
--   `.cursor/scratchpad.md`: Internal development notes and status tracker.
-
-## Key Scripts for Phase 10 (New Block Prediction Focus)
-
--   `src/api_connections.py`: Core functions for fetching Mayanode block data and Tendermint mempool data.
--   `src/common_utils.py`: Parsing logic for block and transaction data.
--   `src/database_utils.py`: Manages database interactions for storing blockchain data.
--   `src/fetch_realtime_transactions.py`: Main script for ongoing data collection and storage.
--   `decode_local_block_for_comparison.py`: Crucial for testing and validating protobuf decoding approaches.
--   (Future scripts for Phase 10: `preprocess_ai_data.py`, `model.py`, `train_model.py`, `evaluate_model_block.py`, `realtime_inference_block.py`)
-
-## Contributing
-
-(Details to be added later if the project becomes open to external contributions.)
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+-   `
